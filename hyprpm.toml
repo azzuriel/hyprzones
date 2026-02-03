@@ -1,6 +1,6 @@
 [repository]
 name = "hyprzones"
-authors = ["Your Name"]
+authors = ["Jan Ohlmann (azzuriel)"]
 commit_pins = [
     # Pin specific Hyprland versions here
     # ["hyprland-commit-hash", "hyprzones-commit-hash"]
@@ -8,8 +8,8 @@ commit_pins = [
 
 [hyprzones]
 description = "Zone-based window tiling inspired by FancyZones"
-authors = ["Your Name"]
-output = "libhyprzones.so"
+authors = ["Jan Ohlmann (azzuriel)"]
+output = "hyprzones.so"
 build = [
     "cmake -DCMAKE_BUILD_TYPE=Release -B build",
     "cmake --build build"
