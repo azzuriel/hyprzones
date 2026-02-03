@@ -86,18 +86,57 @@ Layout LayoutManager::generateFromTemplate(const std::string& templateType,
     return layout;
 }
 
+bool LayoutManager::workspaceMatchesPattern(int workspace, const std::string& pattern) {
+    if (pattern.empty() || pattern == "*") {
+        return true;
+    }
+
+    // Handle comma-separated values: "1,3,5"
+    if (pattern.find(',') != std::string::npos) {
+        std::string p = pattern;
+        size_t pos = 0;
+        while ((pos = p.find(',')) != std::string::npos) {
+            std::string token = p.substr(0, pos);
+            if (!token.empty() && std::stoi(token) == workspace) {
+                return true;
+            }
+            p.erase(0, pos + 1);
+        }
+        if (!p.empty() && std::stoi(p) == workspace) {
+            return true;
+        }
+        return false;
+    }
+
+    // Handle range: "1-5"
+    if (pattern.find('-') != std::string::npos) {
+        size_t dashPos = pattern.find('-');
+        int start = std::stoi(pattern.substr(0, dashPos));
+        int end = std::stoi(pattern.substr(dashPos + 1));
+        return workspace >= start && workspace <= end;
+    }
+
+    // Single number
+    return std::stoi(pattern) == workspace;
+}
+
 Layout* LayoutManager::getLayoutForMonitor(Config& config,
                                            const std::string& monitorName,
                                            int workspace) {
-    for (auto& layout : config.layouts) {
-        bool monitorMatch = layout.monitor.empty() || layout.monitor == monitorName;
-        bool wsMatch      = layout.workspace < 0 || layout.workspace == workspace;
+    // Check mappings first (most specific match wins)
+    for (const auto& mapping : config.mappings) {
+        bool monitorMatch = mapping.monitor == "*" || mapping.monitor == monitorName;
+        bool wsMatch = workspaceMatchesPattern(workspace, mapping.workspaces);
 
         if (monitorMatch && wsMatch) {
-            return &layout;
+            auto it = config.layoutIndex.find(mapping.layout);
+            if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
+                return &config.layouts[it->second];
+            }
         }
     }
 
+    // Fall back to active layout
     if (!config.activeLayout.empty()) {
         auto it = config.layoutIndex.find(config.activeLayout);
         if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
@@ -105,6 +144,7 @@ Layout* LayoutManager::getLayoutForMonitor(Config& config,
         }
     }
 
+    // Last resort: first layout
     if (!config.layouts.empty()) {
         return &config.layouts[0];
     }
@@ -135,24 +175,20 @@ void LayoutManager::cycleLayout(Config& config, int direction) {
     config.activeLayout = config.layouts[newIdx].name;
 }
 
-bool LayoutManager::saveLayouts(const std::string& path, const std::vector<Layout>& layouts) {
+bool LayoutManager::saveLayouts(const std::string& path, const std::vector<Layout>& layouts,
+                                 const std::vector<LayoutMapping>& mappings) {
     std::ofstream file(path);
     if (!file.is_open()) {
         return false;
     }
 
+    // Write layouts
     for (const auto& layout : layouts) {
         file << "[[layouts]]\n";
         file << "name = \"" << layout.name << "\"\n";
 
         if (!layout.hotkey.empty()) {
             file << "hotkey = \"" << layout.hotkey << "\"\n";
-        }
-        if (!layout.monitor.empty()) {
-            file << "monitor = \"" << layout.monitor << "\"\n";
-        }
-        if (layout.workspace >= 0) {
-            file << "workspace = " << layout.workspace << "\n";
         }
         if (!layout.templateType.empty()) {
             file << "template = \"" << layout.templateType << "\"\n";
@@ -170,6 +206,18 @@ bool LayoutManager::saveLayouts(const std::string& path, const std::vector<Layou
         }
 
         file << "\n";
+    }
+
+    // Write mappings
+    if (!mappings.empty()) {
+        file << "# Monitor/Workspace to Layout mappings\n";
+        for (const auto& mapping : mappings) {
+            file << "[[mappings]]\n";
+            file << "monitor = \"" << mapping.monitor << "\"\n";
+            file << "workspaces = \"" << mapping.workspaces << "\"\n";
+            file << "layout = \"" << mapping.layout << "\"\n";
+            file << "\n";
+        }
     }
 
     return true;
@@ -245,8 +293,6 @@ std::vector<Layout> LayoutManager::loadLayouts(const std::string& path) {
         } else if (inLayout) {
             if (key == "name") currentLayout.name = parseString(value);
             else if (key == "hotkey") currentLayout.hotkey = parseString(value);
-            else if (key == "monitor") currentLayout.monitor = parseString(value);
-            else if (key == "workspace") currentLayout.workspace = std::stoi(value);
             else if (key == "template") currentLayout.templateType = parseString(value);
             else if (key == "columns") currentLayout.columns = std::stoi(value);
             else if (key == "rows") currentLayout.rows = std::stoi(value);
@@ -261,6 +307,74 @@ std::vector<Layout> LayoutManager::loadLayouts(const std::string& path) {
     }
 
     return layouts;
+}
+
+std::vector<LayoutMapping> LayoutManager::loadMappings(const std::string& path) {
+    std::vector<LayoutMapping> mappings;
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return mappings;
+    }
+
+    std::string line;
+    LayoutMapping currentMapping;
+    bool inMapping = false;
+
+    auto trim = [](std::string& s) {
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        s.erase(s.find_last_not_of(" \t\r\n") + 1);
+    };
+
+    auto parseString = [](const std::string& value) -> std::string {
+        std::string result = value;
+        if (result.front() == '"') result.erase(0, 1);
+        if (result.back() == '"') result.pop_back();
+        return result;
+    };
+
+    while (std::getline(file, line)) {
+        trim(line);
+        if (line.empty() || line[0] == '#') continue;
+
+        if (line == "[[mappings]]") {
+            if (inMapping && !currentMapping.layout.empty()) {
+                mappings.push_back(currentMapping);
+            }
+            currentMapping = LayoutMapping();
+            currentMapping.workspaces = "*";
+            inMapping = true;
+            continue;
+        }
+
+        // Skip other sections
+        if (line.substr(0, 2) == "[[" && line != "[[mappings]]") {
+            if (inMapping && !currentMapping.layout.empty()) {
+                mappings.push_back(currentMapping);
+            }
+            inMapping = false;
+            continue;
+        }
+
+        if (!inMapping) continue;
+
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+
+        std::string key = line.substr(0, eq);
+        std::string value = line.substr(eq + 1);
+        trim(key);
+        trim(value);
+
+        if (key == "monitor") currentMapping.monitor = parseString(value);
+        else if (key == "workspaces") currentMapping.workspaces = parseString(value);
+        else if (key == "layout") currentMapping.layout = parseString(value);
+    }
+
+    if (inMapping && !currentMapping.layout.empty()) {
+        mappings.push_back(currentMapping);
+    }
+
+    return mappings;
 }
 
 }  // namespace HyprZones

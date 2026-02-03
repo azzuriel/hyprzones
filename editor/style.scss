@@ -272,3 +272,82 @@ $backdrop: rgba(0, 0, 0, 0.85);
         }
     }
 }
+
+.section-header {
+    color: $text-primary;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: "Fira Code", monospace;
+    margin-top: 4px;
+}
+
+// ============================================
+// MAPPINGS UI
+// ============================================
+
+.mapping-header {
+    border-bottom: 1px solid $border-primary;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+
+    label {
+        color: $text-muted;
+        font-size: 11px;
+        font-weight: 600;
+        font-family: "Fira Code", monospace;
+    }
+}
+
+.mappings-list {
+    background: $surface-3;
+    border: 1px solid $border-primary;
+    border-radius: 2px;
+
+    row {
+        background: transparent;
+        border-bottom: 1px solid $border-secondary;
+
+        &:hover {
+            background: $surface-4;
+        }
+
+        &:selected {
+            background: rgba($info, 0.3);
+        }
+
+        label {
+            font-size: 11px;
+        }
+    }
+}
+
+.mapping-combo {
+    background: $surface-4;
+    border: 1px solid $border-primary;
+    border-radius: 2px;
+    padding: 4px 8px;
+    color: $text-primary;
+    font-size: 11px;
+    font-family: "Fira Code", monospace;
+    min-width: 100px;
+
+    &:hover {
+        border-color: $border-hover;
+    }
+}
+
+.mapping-delete-btn {
+    padding: 2px 8px;
+    border-radius: 2px;
+    border: 1px solid rgba(138, 74, 74, 0.5);
+    background: rgba(138, 74, 74, 0.2);
+    color: #cc9999;
+    font-size: 14px;
+    min-width: 24px;
+
+    &:hover {
+        background: rgba(138, 74, 74, 0.4);
+        border-color: rgba(138, 74, 74, 0.7);
+        color: #ffaaaa;
+    }
+}

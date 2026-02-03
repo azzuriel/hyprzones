@@ -9,8 +9,6 @@ namespace HyprZones {
 struct Layout {
     std::string       name;
     std::string       hotkey;     // e.g., "SUPER+CTRL+1"
-    std::string       monitor;    // empty = all monitors
-    int               workspace = -1;  // -1 = all workspaces
     std::vector<Zone> zones;
 
     // Template type: "columns", "rows", "grid", "priority-grid", "custom"

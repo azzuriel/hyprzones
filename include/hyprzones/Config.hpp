@@ -8,6 +8,13 @@
 
 namespace HyprZones {
 
+// Mapping: which layout to use for a specific monitor/workspace combination
+struct LayoutMapping {
+    std::string monitor;      // Monitor name (e.g. "DP-1") or "*" for all
+    std::string workspaces;   // Workspace range (e.g. "1-5", "1,3,5", "*" for all)
+    std::string layout;       // Layout name to use
+};
+
 struct Config {
     // Activation
     std::string snapModifier    = "SHIFT";
@@ -34,6 +41,9 @@ struct Config {
     std::vector<Layout>                     layouts;
     std::unordered_map<std::string, size_t> layoutIndex;  // name -> index in layouts
     std::string                             activeLayout;
+
+    // Mappings: monitor/workspace -> layout
+    std::vector<LayoutMapping> mappings;
 };
 
 std::string getConfigPath();

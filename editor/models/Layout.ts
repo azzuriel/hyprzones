@@ -13,8 +13,13 @@ export interface Layout {
     name: string;
     zones: Zone[];
     spacing: number;
-    monitor?: string;    // Monitor name (e.g. "HDMI-A-1"), empty = all monitors
-    workspace?: number;  // Workspace ID, undefined = all workspaces
+}
+
+// Mapping: which layout to use for a specific monitor/workspace combination
+export interface LayoutMapping {
+    monitor: string;        // Monitor name (e.g. "DP-1") or "*" for all
+    workspaces: string;     // Workspace range (e.g. "1-5", "1,3,5", "*" for all)
+    layout: string;         // Layout name to use
 }
 
 // A splitter segment - bounded line that separates adjacent zones
@@ -31,8 +36,6 @@ export function cloneLayout(layout: Layout): Layout {
     return {
         name: layout.name,
         spacing: layout.spacing,
-        monitor: layout.monitor,
-        workspace: layout.workspace,
         zones: layout.zones.map(z => ({ ...z }))
     };
 }

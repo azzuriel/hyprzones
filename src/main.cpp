@@ -126,11 +126,15 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
 
     int zone = g_zoneManager->getSmallestZoneAtPoint(*layout,
         g_dragState.currentX, g_dragState.currentY);
+
+    // Only damage if zone changed
+    bool zoneChanged = (zone != g_dragState.currentZone);
     g_dragState.currentZone = zone;
+
+    std::vector<int> oldSelected = g_dragState.selectedZones;
 
     if (zone >= 0) {
         if (g_dragState.ctrlHeld && g_dragState.startZone >= 0) {
-            // Multi-zone selection
             g_dragState.selectedZones = g_zoneManager->getZoneRange(
                 *layout, g_dragState.startZone, zone);
         } else {
@@ -143,9 +147,11 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
         g_dragState.selectedZones.clear();
     }
 
-    // Request damage for overlay redraw
-    if (monitor) {
-        g_pHyprRenderer->damageMonitor(monitor);
+    // Only request damage if selection actually changed
+    if (zoneChanged || oldSelected != g_dragState.selectedZones) {
+        if (monitor) {
+            g_pHyprRenderer->damageMonitor(monitor);
+        }
     }
 }
 
@@ -339,7 +345,7 @@ static std::string cmdReload(eHyprCtlOutputFormat, std::string) {
 // IPC: Save layouts to file
 static std::string cmdSave(eHyprCtlOutputFormat, std::string args) {
     std::string path = args.empty() ? getConfigPath() + ".backup" : args;
-    bool success = g_layoutManager->saveLayouts(path, g_config.layouts);
+    bool success = g_layoutManager->saveLayouts(path, g_config.layouts, g_config.mappings);
     return success ? "saved to " + path : "error: failed to save";
 }
 
@@ -396,7 +402,27 @@ static SDispatchResult dispatchCycleLayout(std::string args) {
 // Dispatcher: Show zones
 static SDispatchResult dispatchShowZones(std::string) {
     SDispatchResult result;
-    g_renderer->show();
+
+    if (!g_renderer->isVisible()) {
+        g_renderer->show();
+
+        // Compute zones for current monitor and request single redraw
+        auto monitor = g_pCompositor->getMonitorFromCursor();
+        if (monitor) {
+            auto* layout = g_layoutManager->getLayoutForMonitor(
+                g_config, monitor->m_name,
+                monitor->m_activeWorkspace ? monitor->m_activeWorkspace->m_id : -1
+            );
+            if (layout) {
+                g_zoneManager->computeZonePixels(*layout,
+                    monitor->m_position.x, monitor->m_position.y,
+                    monitor->m_size.x, monitor->m_size.y,
+                    g_config.zoneGap);
+            }
+            g_pHyprRenderer->damageMonitor(monitor);
+        }
+    }
+
     result.success = true;
     return result;
 }
@@ -404,7 +430,17 @@ static SDispatchResult dispatchShowZones(std::string) {
 // Dispatcher: Hide zones
 static SDispatchResult dispatchHideZones(std::string) {
     SDispatchResult result;
-    g_renderer->hide();
+
+    if (g_renderer->isVisible()) {
+        g_renderer->hide();
+
+        // Request single redraw to clear overlay
+        auto monitor = g_pCompositor->getMonitorFromCursor();
+        if (monitor) {
+            g_pHyprRenderer->damageMonitor(monitor);
+        }
+    }
+
     result.success = true;
     return result;
 }

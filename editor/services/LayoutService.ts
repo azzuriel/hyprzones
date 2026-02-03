@@ -1,7 +1,7 @@
 // Layout persistence - load/save layouts from config file
 
 import GLib from "gi://GLib"
-import { Layout, Zone } from '../models/Layout';
+import { Layout, Zone, LayoutMapping } from '../models/Layout';
 
 const CONFIG_PATH = GLib.get_home_dir() + '/.config/hypr/hyprzones.toml';
 
@@ -47,7 +47,8 @@ export function saveLayoutToConfig(layout: Layout, overwrite: boolean = true): b
             layouts.push(layout);
         }
 
-        const content = layoutsToToml(layouts);
+        const mappings = loadAllMappings();
+        const content = configToToml(layouts, mappings);
         GLib.file_set_contents(CONFIG_PATH, content);
         return true;
     } catch (e) {
@@ -62,13 +63,60 @@ export function deleteLayout(name: string): boolean {
         const filtered = layouts.filter(l => l.name !== name);
         if (filtered.length === layouts.length) return false;
 
-        const content = layoutsToToml(filtered);
+        const mappings = loadAllMappings();
+        const content = configToToml(filtered, mappings);
         GLib.file_set_contents(CONFIG_PATH, content);
         return true;
     } catch (e) {
         console.error('Failed to delete layout:', e);
         return false;
     }
+}
+
+// Mapping functions
+export function loadAllMappings(): LayoutMapping[] {
+    try {
+        const [ok, contents] = GLib.file_get_contents(CONFIG_PATH);
+        if (ok && contents) {
+            const content = new TextDecoder().decode(contents);
+            return parseAllTomlMappings(content);
+        }
+    } catch (e) {
+        console.error('Failed to load mappings:', e);
+    }
+    return [];
+}
+
+export function saveMappings(mappings: LayoutMapping[]): boolean {
+    try {
+        const layouts = loadAllLayouts();
+        const content = configToToml(layouts, mappings);
+        GLib.file_set_contents(CONFIG_PATH, content);
+        return true;
+    } catch (e) {
+        console.error('Failed to save mappings:', e);
+        return false;
+    }
+}
+
+export function addMapping(mapping: LayoutMapping): boolean {
+    const mappings = loadAllMappings();
+    mappings.push(mapping);
+    return saveMappings(mappings);
+}
+
+export function removeMapping(index: number): boolean {
+    const mappings = loadAllMappings();
+    if (index < 0 || index >= mappings.length) return false;
+    mappings.splice(index, 1);
+    return saveMappings(mappings);
+}
+
+export function updateMapping(index: number, mapping: LayoutMapping): boolean {
+    const mappings = loadAllMappings();
+    if (index < 0 || index >= mappings.length) return false;
+    mappings[index] = mapping;
+    return saveMappings(mappings);
 }
 
 function parseAllTomlLayouts(content: string): Layout[] {
@@ -129,8 +177,6 @@ function parseAllTomlLayouts(content: string): Layout[] {
                 switch (key) {
                     case 'name': currentLayout.name = cleanValue; break;
                     case 'spacing': currentLayout.spacing = parseInt(cleanValue); break;
-                    case 'monitor': currentLayout.monitor = cleanValue || undefined; break;
-                    case 'workspace': currentLayout.workspace = cleanValue ? parseInt(cleanValue) : undefined; break;
                 }
             }
         }
@@ -218,21 +264,66 @@ function normalizeLayout(layout: Layout): Layout {
     return { ...layout, zones }
 }
 
-function layoutsToToml(layouts: Layout[]): string {
+function parseAllTomlMappings(content: string): LayoutMapping[] {
+    const mappings: LayoutMapping[] = [];
+    let currentMapping: Partial<LayoutMapping> | null = null;
+
+    const lines = content.split('\n');
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        // New mapping section
+        if (trimmed === '[[mappings]]') {
+            if (currentMapping && currentMapping.monitor && currentMapping.layout) {
+                mappings.push(currentMapping as LayoutMapping);
+            }
+            currentMapping = { workspaces: '*' };
+            continue;
+        }
+
+        // Skip non-mapping sections
+        if (trimmed.startsWith('[[') && trimmed !== '[[mappings]]') {
+            if (currentMapping && currentMapping.monitor && currentMapping.layout) {
+                mappings.push(currentMapping as LayoutMapping);
+            }
+            currentMapping = null;
+            continue;
+        }
+
+        // Parse key=value
+        const match = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
+        if (match && currentMapping) {
+            const [, key, value] = match;
+            const cleanValue = value.replace(/"/g, '').trim();
+
+            switch (key) {
+                case 'monitor': currentMapping.monitor = cleanValue; break;
+                case 'workspaces': currentMapping.workspaces = cleanValue; break;
+                case 'layout': currentMapping.layout = cleanValue; break;
+            }
+        }
+    }
+
+    // Save last mapping
+    if (currentMapping && currentMapping.monitor && currentMapping.layout) {
+        mappings.push(currentMapping as LayoutMapping);
+    }
+
+    return mappings;
+}
+
+function configToToml(layouts: Layout[], mappings: LayoutMapping[]): string {
     let content = '';
 
+    // Write layouts
     for (const layout of layouts) {
         const normalized = normalizeLayout(layout)
 
         content += '[[layouts]]\n';
         content += `name = "${normalized.name}"\n`;
         content += `spacing = ${normalized.spacing}\n`;
-        if (normalized.monitor) {
-            content += `monitor = "${normalized.monitor}"\n`;
-        }
-        if (normalized.workspace !== undefined) {
-            content += `workspace = ${normalized.workspace}\n`;
-        }
 
         for (const zone of normalized.zones) {
             content += '\n[[layouts.zones]]\n';
@@ -245,5 +336,21 @@ function layoutsToToml(layouts: Layout[]): string {
         content += '\n';
     }
 
+    // Write mappings
+    if (mappings.length > 0) {
+        content += '# Monitor/Workspace to Layout mappings\n';
+        for (const mapping of mappings) {
+            content += '[[mappings]]\n';
+            content += `monitor = "${mapping.monitor}"\n`;
+            content += `workspaces = "${mapping.workspaces}"\n`;
+            content += `layout = "${mapping.layout}"\n`;
+            content += '\n';
+        }
+    }
+
     return content;
+}
+
+function layoutsToToml(layouts: Layout[]): string {
+    return configToToml(layouts, []);
 }
