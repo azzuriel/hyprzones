@@ -119,6 +119,34 @@ export function updateMapping(index: number, mapping: LayoutMapping): boolean {
     return saveMappings(mappings);
 }
 
+export function getActiveLayoutName(monitorName: string, workspaceId: number): string | null {
+    const mappings = loadAllMappings();
+
+    // First pass: look for specific workspace match
+    for (const mapping of mappings) {
+        if (mapping.monitor !== monitorName) continue;
+
+        const ws = mapping.workspaces;
+        if (ws === '*') continue;  // Skip wildcard in first pass
+
+        // Check if workspace matches
+        const wsNumbers = ws.split(',').map(s => s.trim());
+        if (wsNumbers.includes(String(workspaceId))) {
+            return mapping.layout;
+        }
+    }
+
+    // Second pass: look for wildcard match
+    for (const mapping of mappings) {
+        if (mapping.monitor !== monitorName) continue;
+        if (mapping.workspaces === '*') {
+            return mapping.layout;
+        }
+    }
+
+    return null;
+}
+
 function parseAllTomlLayouts(content: string): Layout[] {
     const layouts: Layout[] = [];
     let currentLayout: Layout | null = null;

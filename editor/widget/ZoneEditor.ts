@@ -7,7 +7,7 @@ import { execAsync } from "ags/process"
 import GLib from "gi://GLib"
 import { Layout, Zone, LayoutMapping, cloneLayout, getSplitterSegments, SplitterSegment } from "../models/Layout"
 import { MonitorGeometry, PixelRect, PixelSplitter, zoneToPixels, splitterToPixels, collectGridBoundaries, clamp } from "../utils/geometry"
-import { loadLayoutFromConfig, loadLayoutByName, saveLayoutToConfig, getLayoutNames, deleteLayout, loadAllMappings, saveMappings, addMapping, removeMapping } from "../services/LayoutService"
+import { loadLayoutFromConfig, loadLayoutByName, saveLayoutToConfig, getLayoutNames, deleteLayout, loadAllMappings, saveMappings, addMapping, removeMapping, getActiveLayoutName } from "../services/LayoutService"
 import { reloadConfig } from "../services/HyprzonesIPC"
 
 const WINDOW_NAME = "hyprzones-editor"
@@ -35,6 +35,7 @@ interface HyprMonitor {
     scale: number
     reserved: [number, number, number, number]  // left, top, right, bottom
     focused: boolean
+    activeWorkspace: { id: number, name: string }
 }
 
 // State
@@ -706,16 +707,38 @@ function refreshLayoutList() {
     // Clear existing rows
     layoutListBox.foreach((child: Gtk.Widget) => layoutListBox!.remove(child))
 
+    // Get active layout for current monitor/workspace
+    const focusedMonitor = allMonitors.find(m => m.focused)
+    const activeLayoutName = focusedMonitor
+        ? getActiveLayoutName(focusedMonitor.name, focusedMonitor.activeWorkspace?.id || 1)
+        : null
+
     // Add layouts
     const layoutNames = getLayoutNames()
     for (const name of layoutNames) {
         const row = new Gtk.ListBoxRow()
+        const rowBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
+
+        // Green checkmark for active layout
+        if (name === activeLayoutName) {
+            const checkLabel = new Gtk.Label({ label: "✓" })
+            checkLabel.get_style_context().add_class("active-layout-check")
+            checkLabel.set_margin_start(8)
+            rowBox.pack_start(checkLabel, false, false, 0)
+        } else {
+            // Spacer for alignment
+            const spacer = new Gtk.Label({ label: "  " })
+            spacer.set_margin_start(8)
+            rowBox.pack_start(spacer, false, false, 0)
+        }
+
         const rowLabel = new Gtk.Label({ label: name })
         rowLabel.set_halign(Gtk.Align.START)
         rowLabel.set_margin_top(8)
         rowLabel.set_margin_bottom(8)
-        rowLabel.set_margin_start(12)
-        row.add(rowLabel)
+        rowBox.pack_start(rowLabel, true, true, 0)
+
+        row.add(rowBox)
         layoutListBox.add(row)
     }
     layoutListBox.show_all()
