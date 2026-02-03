@@ -148,11 +148,7 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
     int zone = g_zoneManager->getSmallestZoneAtPoint(*layout,
         g_dragState.currentX, g_dragState.currentY);
 
-    // Only damage if zone changed
-    bool zoneChanged = (zone != g_dragState.currentZone);
     g_dragState.currentZone = zone;
-
-    std::vector<int> oldSelected = g_dragState.selectedZones;
 
     if (zone >= 0) {
         if (g_dragState.ctrlHeld && g_dragState.startZone >= 0) {
@@ -168,11 +164,9 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
         g_dragState.selectedZones.clear();
     }
 
-    // Only request damage if selection actually changed
-    if (zoneChanged || oldSelected != g_dragState.selectedZones) {
-        if (monitor) {
-            g_pHyprRenderer->damageMonitor(monitor);
-        }
+    // Always request damage while dragging - the window moves and covers the overlay
+    if (monitor) {
+        g_pHyprRenderer->damageMonitor(monitor);
     }
 }
 
