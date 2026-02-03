@@ -63,6 +63,29 @@ let dragUsableSize = 0
 let zoneContainer: Gtk.Fixed
 let mainOverlay: Gtk.Overlay
 
+// Reload layout for current monitor/workspace (called when editor is shown)
+export async function reloadCurrentLayout(): Promise<void> {
+    allMonitors = await fetchAllMonitors()
+    const focusedMonitor = allMonitors.find(m => m.focused) || allMonitors[0]
+    if (focusedMonitor) {
+        monitor = selectMonitor(focusedMonitor)
+        const workspaceId = focusedMonitor.activeWorkspace?.id || 1
+        const mappedLayoutName = getActiveLayoutName(selectedMonitorName, workspaceId)
+
+        let loadedLayout: Layout | null = null
+        if (mappedLayoutName) {
+            loadedLayout = loadLayoutByName(mappedLayoutName)
+        }
+        if (!loadedLayout) {
+            loadedLayout = loadLayoutFromConfig()
+        }
+        currentLayout = cloneLayout(loadedLayout || currentLayout)
+        originalLayout = cloneLayout(currentLayout)
+        hasChanges = false
+        updateZoneDisplay()
+    }
+}
+
 // Update zone positions in the container
 function updateZoneDisplay() {
     if (!zoneContainer) return
@@ -120,9 +143,12 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
     const canSplitV = rect.width >= MIN_SPLIT_SIZE
     const canSplitH = rect.height >= MIN_SPLIT_SIZE
 
+    const ZONE_BTN_SIZE = 28
+
     // Vertical split button (split left/right) - only show if possible
     if (canSplitV) {
-        const splitVBtn = new Gtk.Button({ label: "⬍" })
+        const splitVBtn = new Gtk.Button({ label: "|" })
+        splitVBtn.set_size_request(ZONE_BTN_SIZE, ZONE_BTN_SIZE)
         splitVBtn.get_style_context().add_class("zone-split-btn")
         splitVBtn.set_tooltip_text("Split vertically")
         splitVBtn.connect("clicked", () => splitZone(zone, 'vertical'))
@@ -131,7 +157,8 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
 
     // Horizontal split button (split top/bottom) - only show if possible
     if (canSplitH) {
-        const splitHBtn = new Gtk.Button({ label: "⬌" })
+        const splitHBtn = new Gtk.Button({ label: "—" })
+        splitHBtn.set_size_request(ZONE_BTN_SIZE, ZONE_BTN_SIZE)
         splitHBtn.get_style_context().add_class("zone-split-btn")
         splitHBtn.set_tooltip_text("Split horizontally")
         splitHBtn.connect("clicked", () => splitZone(zone, 'horizontal'))
@@ -141,7 +168,8 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
     // Merge button - only show if there's a mergeable neighbor
     const mergeTarget = findMergeableNeighbor(zone)
     if (mergeTarget && currentLayout.zones.length > 1) {
-        const mergeBtn = new Gtk.Button({ label: "✕" })
+        const mergeBtn = new Gtk.Button({ label: "×" })
+        mergeBtn.set_size_request(ZONE_BTN_SIZE, ZONE_BTN_SIZE)
         mergeBtn.get_style_context().add_class("zone-split-btn")
         mergeBtn.get_style_context().add_class("zone-merge-btn")
         mergeBtn.set_tooltip_text("Merge with neighbor")
@@ -517,19 +545,10 @@ function createLayoutPanel(): Gtk.Box {
     layoutButtonBox.set_halign(Gtk.Align.CENTER)
 
     let selectedOldName: string | null = null
-    layoutListBox.connect("row-selected", (_: Gtk.ListBox, row: Gtk.ListBoxRow | null) => {
-        if (row && layoutNameEntry) {
-            // Row contains Box -> [activeIndicator, mappedIndicator, rowLabel]
-            const rowBox = row.get_child() as Gtk.Box
-            const children = rowBox.get_children()
-            const rowLabel = children[2] as Gtk.Label  // Third child is the name label
-            selectedOldName = rowLabel.get_label()
-            layoutNameEntry.set_text(selectedOldName)
-        }
-    })
 
     const loadBtn = new Gtk.Button({ label: "Load" })
     loadBtn.get_style_context().add_class("toolbar-button")
+    loadBtn.get_style_context().add_class("toolbar-save")
 
     const saveBtn = new Gtk.Button({ label: "Save" })
     saveBtn.get_style_context().add_class("toolbar-button")
@@ -549,8 +568,9 @@ function createLayoutPanel(): Gtk.Box {
         const layoutExists = layoutNames.includes(name)
         const hasName = name.length > 0
         const nameChanged = selectedOldName !== null && name !== selectedOldName
+        const isDifferentLayout = name !== currentLayout.name
 
-        loadBtn.set_sensitive(layoutExists)
+        loadBtn.set_sensitive(layoutExists && isDifferentLayout)
         saveBtn.set_sensitive(hasName)
         renameBtn.set_sensitive(selectedOldName !== null && nameChanged && hasName)
         deleteBtn.set_sensitive(layoutExists)
@@ -558,6 +578,18 @@ function createLayoutPanel(): Gtk.Box {
 
     // Update on name entry change
     layoutNameEntry.connect("changed", updateLayoutButtonStates)
+
+    // Update on row selection
+    layoutListBox.connect("row-selected", (_: Gtk.ListBox, row: Gtk.ListBoxRow | null) => {
+        if (row && layoutNameEntry) {
+            const rowBox = row.get_child() as Gtk.Box
+            const children = rowBox.get_children()
+            const rowLabel = children[2] as Gtk.Label
+            selectedOldName = rowLabel.get_label()
+            layoutNameEntry.set_text(selectedOldName)
+            updateLayoutButtonStates()
+        }
+    })
 
     loadBtn.connect("clicked", () => {
         if (!layoutNameEntry) return
@@ -1106,8 +1138,18 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
         return errorWin
     }
 
-    // Load or use default layout
-    const loadedLayout = loadLayoutFromConfig()
+    // Load layout for current monitor/workspace, or first layout, or default
+    const focusedMonitor = allMonitors.find(m => m.focused) || allMonitors[0]
+    const workspaceId = focusedMonitor?.activeWorkspace?.id || 1
+    const mappedLayoutName = getActiveLayoutName(selectedMonitorName, workspaceId)
+
+    let loadedLayout: Layout | null = null
+    if (mappedLayoutName) {
+        loadedLayout = loadLayoutByName(mappedLayoutName)
+    }
+    if (!loadedLayout) {
+        loadedLayout = loadLayoutFromConfig()
+    }
     currentLayout = cloneLayout(loadedLayout || DEFAULT_LAYOUT)
     originalLayout = cloneLayout(currentLayout)
     hasChanges = false

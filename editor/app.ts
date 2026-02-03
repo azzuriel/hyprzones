@@ -2,7 +2,7 @@
 
 import app from "ags/gtk3/app"
 import style from "./style.scss"
-import ZoneEditor from "./widget/ZoneEditor"
+import ZoneEditor, { reloadCurrentLayout } from "./widget/ZoneEditor"
 
 let editorWindow: any = null
 let isVisible = false
@@ -39,18 +39,22 @@ app.start({
                     isVisible = false
                     res("hidden")
                 } else {
-                    editorWindow.show()
-                    isVisible = true
-                    res("shown")
+                    reloadCurrentLayout().then(() => {
+                        editorWindow.show()
+                        isVisible = true
+                        res("shown")
+                    })
                 }
             } else {
                 res("window not ready")
             }
         } else if (reqStr.includes("show")) {
             if (editorWindow) {
-                editorWindow.show()
-                isVisible = true
-                res("shown")
+                reloadCurrentLayout().then(() => {
+                    editorWindow.show()
+                    isVisible = true
+                    res("shown")
+                })
             } else {
                 res("window not ready")
             }

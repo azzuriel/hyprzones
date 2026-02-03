@@ -227,83 +227,84 @@ function parseAllTomlLayouts(content: string): Layout[] {
 }
 
 // Normalize layout boundaries to prevent floating point errors
-// Snaps shared boundaries to identical values
+// Uses 0.1% precision (1000 units) for pixel-accurate positioning
 function normalizeLayout(layout: Layout): Layout {
     const zones = layout.zones.map(z => ({ ...z }))
-    const SNAP_THRESHOLD = 0.02 // 2% tolerance for snapping gaps
 
-    // Collect all unique boundary positions
-    const xBoundaries: number[] = []
-    const yBoundaries: number[] = []
-
+    // Step 1: Round everything to 0.1% precision
     for (const zone of zones) {
-        xBoundaries.push(zone.x, zone.x + zone.width)
-        yBoundaries.push(zone.y, zone.y + zone.height)
+        zone.x = Math.round(zone.x * 1000) / 1000
+        zone.y = Math.round(zone.y * 1000) / 1000
+        zone.width = Math.round(zone.width * 1000) / 1000
+        zone.height = Math.round(zone.height * 1000) / 1000
     }
 
-    // Snap boundaries that are close together to the same value
-    function snapValue(value: number, boundaries: number[]): number {
-        for (const boundary of boundaries) {
-            if (Math.abs(value - boundary) < SNAP_THRESHOLD && Math.abs(value - boundary) > 0.0001) {
-                return boundary
+    // Step 2: Collect all boundary positions (0.1% precision = multiply by 1000)
+    const xStarts = zones.map(z => Math.round(z.x * 1000))
+    const xEnds = zones.map(z => Math.round((z.x + z.width) * 1000))
+    const yStarts = zones.map(z => Math.round(z.y * 1000))
+    const yEnds = zones.map(z => Math.round((z.y + z.height) * 1000))
+
+    // Step 3: For each end boundary, find the CLOSEST start boundary within 0.5%
+    // If so, adjust the width/height to match exactly
+    const SNAP_THRESHOLD = 5  // 0.5% in 1000-units
+    for (let i = 0; i < zones.length; i++) {
+        const zone = zones[i]
+        const xEnd = Math.round((zone.x + zone.width) * 1000)
+        const yEnd = Math.round((zone.y + zone.height) * 1000)
+        const zoneXStart = Math.round(zone.x * 1000)
+        const zoneYStart = Math.round(zone.y * 1000)
+
+        // Find closest x start boundary
+        let closestX = xEnd
+        let closestXDist = Infinity
+        for (const xStart of xStarts) {
+            if (xStart > zoneXStart && xStart !== xEnd) {
+                const dist = Math.abs(xStart - xEnd)
+                if (dist <= SNAP_THRESHOLD && dist < closestXDist) {
+                    closestX = xStart
+                    closestXDist = dist
+                }
             }
         }
-        return value
-    }
+        if (closestXDist <= SNAP_THRESHOLD) {
+            zone.width = (closestX - zoneXStart) / 1000
+        }
 
-    // Sort boundaries so we snap to the first occurrence
-    xBoundaries.sort((a, b) => a - b)
-    yBoundaries.sort((a, b) => a - b)
-
-    // Remove near-duplicates from boundaries (keep first)
-    function dedupBoundaries(arr: number[]): number[] {
-        const result: number[] = []
-        for (const val of arr) {
-            if (result.length === 0 || Math.abs(val - result[result.length - 1]) >= SNAP_THRESHOLD) {
-                result.push(val)
+        // Find closest y start boundary
+        let closestY = yEnd
+        let closestYDist = Infinity
+        for (const yStart of yStarts) {
+            if (yStart > zoneYStart && yStart !== yEnd) {
+                const dist = Math.abs(yStart - yEnd)
+                if (dist <= SNAP_THRESHOLD && dist < closestYDist) {
+                    closestY = yStart
+                    closestYDist = dist
+                }
             }
         }
-        return result
+        if (closestYDist <= SNAP_THRESHOLD) {
+            zone.height = (closestY - zoneYStart) / 1000
+        }
     }
 
-    const uniqueX = dedupBoundaries(xBoundaries)
-    const uniqueY = dedupBoundaries(yBoundaries)
-
-    // Snap all zone boundaries to the unique values
+    // Step 4: Snap to edges (0 and 100%)
     for (const zone of zones) {
-        const oldRight = zone.x + zone.width
-        const oldBottom = zone.y + zone.height
+        if (zone.x <= 0.005) zone.x = 0
+        if (zone.y <= 0.005) zone.y = 0
 
-        zone.x = snapValue(zone.x, uniqueX)
-        zone.y = snapValue(zone.y, uniqueY)
-
-        const newRight = snapValue(oldRight, uniqueX)
-        const newBottom = snapValue(oldBottom, uniqueY)
-
-        zone.width = newRight - zone.x
-        zone.height = newBottom - zone.y
-    }
-
-    // Snap edges to 0 or 1 if close
-    const EDGE_THRESHOLD = 0.02
-    for (const zone of zones) {
-        // Snap to left/top edge
-        if (zone.x < EDGE_THRESHOLD) zone.x = 0
-        if (zone.y < EDGE_THRESHOLD) zone.y = 0
-
-        // Snap to right/bottom edge
         const right = zone.x + zone.width
         const bottom = zone.y + zone.height
-        if (right > 1 - EDGE_THRESHOLD) zone.width = 1 - zone.x
-        if (bottom > 1 - EDGE_THRESHOLD) zone.height = 1 - zone.y
+        if (right >= 0.995) zone.width = 1 - zone.x
+        if (bottom >= 0.995) zone.height = 1 - zone.y
     }
 
-    // Round to integer percentages for clean config
+    // Step 5: Final rounding to 0.1% precision
     for (const zone of zones) {
-        zone.x = Math.round(zone.x * 100) / 100
-        zone.y = Math.round(zone.y * 100) / 100
-        zone.width = Math.round(zone.width * 100) / 100
-        zone.height = Math.round(zone.height * 100) / 100
+        zone.x = Math.round(zone.x * 1000) / 1000
+        zone.y = Math.round(zone.y * 1000) / 1000
+        zone.width = Math.round(zone.width * 1000) / 1000
+        zone.height = Math.round(zone.height * 1000) / 1000
     }
 
     return { ...layout, zones }
@@ -373,10 +374,11 @@ function configToToml(layouts: Layout[], mappings: LayoutMapping[]): string {
         for (const zone of normalized.zones) {
             content += '\n[[layouts.zones]]\n';
             content += `name = "${zone.name}"\n`;
-            content += `x = ${Math.round(zone.x * 100)}\n`;
-            content += `y = ${Math.round(zone.y * 100)}\n`;
-            content += `width = ${Math.round(zone.width * 100)}\n`;
-            content += `height = ${Math.round(zone.height * 100)}\n`;
+            // Use 1 decimal place (0.1% precision) for pixel-accurate positioning
+            content += `x = ${Math.round(zone.x * 1000) / 10}\n`;
+            content += `y = ${Math.round(zone.y * 1000) / 10}\n`;
+            content += `width = ${Math.round(zone.width * 1000) / 10}\n`;
+            content += `height = ${Math.round(zone.height * 1000) / 10}\n`;
         }
         content += '\n';
     }
