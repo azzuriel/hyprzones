@@ -487,34 +487,20 @@ static SDispatchResult dispatchHideZones(std::string) {
     return result;
 }
 
-// Dispatcher: Toggle editor (uses AGS instance messaging)
+// Dispatcher: Toggle editor (fully non-blocking)
 static SDispatchResult dispatchEditor(std::string) {
     SDispatchResult result;
 
-    // Try to send toggle request to existing instance
-    // If instance doesn't exist, ags request will fail and we start a new one
-    FILE* fp = popen("ags request -i hyprzones-editor toggle 2>&1", "r");
-    if (fp) {
-        char buf[256];
-        std::string response;
-        while (fgets(buf, sizeof(buf), fp) != nullptr) {
-            response += buf;
-        }
-        int status = pclose(fp);
-
-        // If request failed (instance not running), start new editor
-        if (status != 0 || response.find("Error") != std::string::npos ||
-            response.find("error") != std::string::npos ||
-            response.find("not running") != std::string::npos) {
-            if (fork() == 0) {
-                execlp("bash", "bash", "-c",
-                    "ags run /mnt/code/SRC/GITHUB/hyprzones/editor/app.ts 2>/dev/null || "
-                    "ags run ~/.config/hyprzones/editor/app.ts 2>/dev/null || "
-                    "ags run /usr/share/hyprzones/editor/app.ts",
-                    nullptr);
-                _exit(1);
-            }
-        }
+    // Fork immediately to avoid blocking Hyprland
+    if (fork() == 0) {
+        // Child process - try toggle first, start if not running
+        execlp("bash", "bash", "-c",
+            "ags request -i hyprzones-editor toggle 2>/dev/null || "
+            "ags run /mnt/code/SRC/GITHUB/hyprzones/editor/app.ts 2>/dev/null || "
+            "ags run ~/.config/hyprzones/editor/app.ts 2>/dev/null || "
+            "ags run /usr/share/hyprzones/editor/app.ts 2>/dev/null",
+            nullptr);
+        _exit(1);
     }
 
     result.success = true;
