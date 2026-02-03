@@ -183,8 +183,28 @@ static void onRender(void*, SCallbackInfo&, std::any data) {
     if (!g_renderer->isVisible())
         return;
 
-    // TODO: Implement actual OpenGL rendering of zone overlay
-    // This requires hooking into Hyprland's render pass
+    // Get the monitor being rendered
+    auto* monitor = std::any_cast<CMonitor*>(data);
+    if (!monitor)
+        return;
+
+    // Get layout for this monitor
+    auto* layout = g_layoutManager->getLayoutForMonitor(
+        g_config, monitor->m_name,
+        monitor->m_activeWorkspace ? monitor->m_activeWorkspace->m_id : -1
+    );
+
+    if (!layout || layout->zones.empty())
+        return;
+
+    // Compute zone pixels if needed
+    g_zoneManager->computeZonePixels(*layout,
+        monitor->m_position.x, monitor->m_position.y,
+        monitor->m_size.x, monitor->m_size.y,
+        g_config.zoneGap);
+
+    // Render the overlay
+    g_renderer->renderOverlay(monitor, *layout, g_dragState.selectedZones, g_config);
 }
 
 // IPC: List layouts
