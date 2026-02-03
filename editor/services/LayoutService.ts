@@ -173,7 +173,7 @@ function parseAllTomlLayouts(content: string): Layout[] {
                     layouts.push(currentLayout);
                 }
             }
-            currentLayout = { name: 'unnamed', spacing: 10, zones: [] };
+            currentLayout = { name: 'unnamed', spacing: 30, zones: [] };
             currentZone = null;
             zoneIndex = 0;
             continue;

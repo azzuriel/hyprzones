@@ -16,7 +16,7 @@ const SPLITTER_THICKNESS = 12
 // Default layout if none exists
 const DEFAULT_LAYOUT: Layout = {
     name: 'default',
-    spacing: 10,
+    spacing: 30,
     zones: [
         { index: 0, name: 'Left', x: 0, y: 0, width: 0.5, height: 1 },
         { index: 1, name: 'Right', x: 0.5, y: 0, width: 0.5, height: 1 }
