@@ -50,14 +50,14 @@ static Layout createClionAseDevLayout() {
     clientWeb.height = 227.0 / 2160.0;
     layout.zones.push_back(clientWeb);
 
-    // Root (x:2144, y:97, w:1146, h:501)
+    // Root (x:2145, y:97, w:1148, h:227)
     Zone root;
     root.index = idx++;
     root.name = "Root";
-    root.x = 2144.0 / 3840.0;
+    root.x = 2145.0 / 3840.0;
     root.y = 97.0 / 2160.0;
-    root.width = 1146.0 / 3840.0;
-    root.height = 501.0 / 2160.0;
+    root.width = 1148.0 / 3840.0;
+    root.height = 227.0 / 2160.0;
     layout.zones.push_back(root);
 
     // Compliance (x:3304, y:96, w:514, h:998)
@@ -110,14 +110,14 @@ static Layout createClionAseDevLayout() {
     terminal.height = 1201.0 / 2160.0;
     layout.zones.push_back(terminal);
 
-    // ASE Main (x:2405, y:645, w:870, h:1135)
+    // ASE Main (x:2399, y:642, w:890, h:1200)
     Zone aseMain;
     aseMain.index = idx++;
     aseMain.name = "Main";
-    aseMain.x = 2405.0 / 3840.0;
-    aseMain.y = 645.0 / 2160.0;
-    aseMain.width = 870.0 / 3840.0;
-    aseMain.height = 1135.0 / 2160.0;
+    aseMain.x = 2399.0 / 3840.0;
+    aseMain.y = 642.0 / 2160.0;
+    aseMain.width = 890.0 / 3840.0;
+    aseMain.height = 1200.0 / 2160.0;
     layout.zones.push_back(aseMain);
 
     // Testrunner (x:3304, y:1140, w:514, h:998)
