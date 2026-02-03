@@ -44,7 +44,6 @@ let dragUsableSize = 0
 
 // UI elements that need updating
 let zoneContainer: Gtk.Fixed
-let saveButton: Gtk.Button
 
 // Update zone positions in the container
 function updateZoneDisplay() {
@@ -72,7 +71,6 @@ function updateZoneDisplay() {
     }
 
     zoneContainer.show_all()
-    updateSaveButton()
 }
 
 // Create a zone rectangle widget with split buttons
@@ -119,6 +117,17 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
         splitHBtn.set_tooltip_text("Split horizontally")
         splitHBtn.connect("clicked", () => splitZone(zone, 'horizontal'))
         buttonBox.pack_start(splitHBtn, false, false, 0)
+    }
+
+    // Merge button - only show if there's a mergeable neighbor
+    const mergeTarget = findMergeableNeighbor(zone)
+    if (mergeTarget && currentLayout.zones.length > 1) {
+        const mergeBtn = new Gtk.Button({ label: "✕" })
+        mergeBtn.get_style_context().add_class("zone-split-btn")
+        mergeBtn.get_style_context().add_class("zone-merge-btn")
+        mergeBtn.set_tooltip_text("Merge with neighbor")
+        mergeBtn.connect("clicked", () => mergeZones(zone, mergeTarget))
+        buttonBox.pack_start(mergeBtn, false, false, 0)
     }
 
     // Center content
@@ -175,6 +184,60 @@ function splitZone(zone: Zone, direction: 'horizontal' | 'vertical') {
     }
 
     currentLayout.zones.push(newZone)
+    hasChanges = true
+    updateZoneDisplay()
+}
+
+// Finde einen Nachbarn mit dem diese Zone gemerged werden kann
+// Gibt den Nachbarn zurück wenn sie eine komplette Kante teilen
+function findMergeableNeighbor(zone: Zone): Zone | null {
+    const eps = 0.001
+
+    for (const other of currentLayout.zones) {
+        if (other.name === zone.name) continue
+
+        // Prüfe ob sie horizontal nebeneinander sind (gleiche Höhe, gleiche y-Position)
+        if (Math.abs(zone.y - other.y) < eps && Math.abs(zone.height - other.height) < eps) {
+            // Zone rechts von other?
+            if (Math.abs(zone.x - (other.x + other.width)) < eps) return other
+            // Zone links von other?
+            if (Math.abs(other.x - (zone.x + zone.width)) < eps) return other
+        }
+
+        // Prüfe ob sie vertikal übereinander sind (gleiche Breite, gleiche x-Position)
+        if (Math.abs(zone.x - other.x) < eps && Math.abs(zone.width - other.width) < eps) {
+            // Zone unter other?
+            if (Math.abs(zone.y - (other.y + other.height)) < eps) return other
+            // Zone über other?
+            if (Math.abs(other.y - (zone.y + zone.height)) < eps) return other
+        }
+    }
+
+    return null
+}
+
+// Merge zwei Zonen zu einer
+function mergeZones(zone: Zone, neighbor: Zone) {
+    const eps = 0.001
+
+    // Bestimme die neue Größe (Bounding Box beider Zonen)
+    const minX = Math.min(zone.x, neighbor.x)
+    const minY = Math.min(zone.y, neighbor.y)
+    const maxX = Math.max(zone.x + zone.width, neighbor.x + neighbor.width)
+    const maxY = Math.max(zone.y + zone.height, neighbor.y + neighbor.height)
+
+    // Erweitere die Zone
+    zone.x = minX
+    zone.y = minY
+    zone.width = maxX - minX
+    zone.height = maxY - minY
+
+    // Entferne den Nachbarn
+    const neighborIndex = currentLayout.zones.findIndex(z => z.name === neighbor.name)
+    if (neighborIndex !== -1) {
+        currentLayout.zones.splice(neighborIndex, 1)
+    }
+
     hasChanges = true
     updateZoneDisplay()
 }
@@ -389,12 +452,6 @@ function moveSplitterSegment(segment: SplitterSegment, delta: number) {
     updateZoneDisplay()
 }
 
-// Update save button state
-function updateSaveButton() {
-    if (saveButton) {
-        saveButton.set_sensitive(hasChanges)
-    }
-}
 
 // Layout manager panel (embedded overlay, not separate window)
 let layoutPanel: Gtk.Box | null = null
@@ -430,19 +487,13 @@ function createLayoutPanel(): Gtk.Box {
     layoutListBox.set_selection_mode(Gtk.SelectionMode.SINGLE)
     layoutListBox.get_style_context().add_class("layout-list")
 
-    layoutListBox.connect("row-selected", (_: Gtk.ListBox, row: Gtk.ListBoxRow | null) => {
-        if (row && layoutNameEntry) {
-            const label = row.get_child() as Gtk.Label
-            layoutNameEntry.set_text(label.get_label())
-        }
-    })
-
     scrollWindow.add(layoutListBox)
 
     // Buttons
     const buttonBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
-    buttonBox.set_halign(Gtk.Align.END)
+    buttonBox.set_halign(Gtk.Align.CENTER)
 
+    // Load - lädt ausgewähltes Layout
     const loadBtn = new Gtk.Button({ label: "Load" })
     loadBtn.get_style_context().add_class("toolbar-button")
     loadBtn.connect("clicked", () => {
@@ -460,19 +511,7 @@ function createLayoutPanel(): Gtk.Box {
         }
     })
 
-    const deleteBtn = new Gtk.Button({ label: "Delete" })
-    deleteBtn.get_style_context().add_class("toolbar-button")
-    deleteBtn.get_style_context().add_class("toolbar-reset")
-    deleteBtn.connect("clicked", () => {
-        if (!layoutNameEntry) return
-        const name = layoutNameEntry.get_text()
-        const layoutNames = getLayoutNames()
-        if (name && layoutNames.includes(name)) {
-            deleteLayout(name)
-            refreshLayoutList()
-        }
-    })
-
+    // Save - speichert aktuelles Layout unter dem Namen
     const saveBtn = new Gtk.Button({ label: "Save" })
     saveBtn.get_style_context().add_class("toolbar-button")
     saveBtn.get_style_context().add_class("toolbar-save")
@@ -485,20 +524,69 @@ function createLayoutPanel(): Gtk.Box {
             if (success) {
                 await reloadConfig()
                 hasChanges = false
-                updateSaveButton()
-                hideLayoutPanel()
+                refreshLayoutList()
             }
         }
     })
 
-    const cancelBtn = new Gtk.Button({ label: "Cancel" })
-    cancelBtn.get_style_context().add_class("toolbar-button")
-    cancelBtn.connect("clicked", hideLayoutPanel)
+    // Rename - benennt das ausgewählte Layout um
+    let selectedOldName: string | null = null
+    layoutListBox.connect("row-selected", (_: Gtk.ListBox, row: Gtk.ListBoxRow | null) => {
+        if (row && layoutNameEntry) {
+            const label = row.get_child() as Gtk.Label
+            selectedOldName = label.get_label()
+            layoutNameEntry.set_text(selectedOldName)
+        }
+    })
 
-    buttonBox.pack_start(deleteBtn, false, false, 0)
+    const renameBtn = new Gtk.Button({ label: "Rename" })
+    renameBtn.get_style_context().add_class("toolbar-button")
+    renameBtn.connect("clicked", async () => {
+        if (!layoutNameEntry || !selectedOldName) return
+        const newName = layoutNameEntry.get_text()
+        if (newName && newName !== selectedOldName) {
+            const layout = loadLayoutByName(selectedOldName)
+            if (layout) {
+                deleteLayout(selectedOldName)
+                layout.name = newName
+                saveLayoutToConfig(layout, true)
+                if (currentLayout.name === selectedOldName) {
+                    currentLayout.name = newName
+                }
+                await reloadConfig()
+                refreshLayoutList()
+                selectedOldName = newName
+            }
+        }
+    })
+
+    // Delete - löscht das ausgewählte Layout
+    const deleteBtn = new Gtk.Button({ label: "Delete" })
+    deleteBtn.get_style_context().add_class("toolbar-button")
+    deleteBtn.get_style_context().add_class("toolbar-reset")
+    deleteBtn.connect("clicked", async () => {
+        if (!layoutNameEntry) return
+        const name = layoutNameEntry.get_text()
+        const layoutNames = getLayoutNames()
+        if (name && layoutNames.includes(name)) {
+            deleteLayout(name)
+            await reloadConfig()
+            refreshLayoutList()
+            layoutNameEntry.set_text("")
+            selectedOldName = null
+        }
+    })
+
+    // Close - schließt den Dialog
+    const closeBtn = new Gtk.Button({ label: "Close" })
+    closeBtn.get_style_context().add_class("toolbar-button")
+    closeBtn.connect("clicked", hideLayoutPanel)
+
     buttonBox.pack_start(loadBtn, false, false, 0)
-    buttonBox.pack_start(cancelBtn, false, false, 0)
     buttonBox.pack_start(saveBtn, false, false, 0)
+    buttonBox.pack_start(renameBtn, false, false, 0)
+    buttonBox.pack_start(deleteBtn, false, false, 0)
+    buttonBox.pack_start(closeBtn, false, false, 0)
 
     panel.pack_start(nameBox, false, false, 0)
     panel.pack_start(listLabel, false, false, 0)
@@ -558,20 +646,26 @@ function hideLayoutPanel() {
     }
 }
 
-// Handle save - show layout panel
-function handleSave() {
-    showLayoutPanel()
-}
-
 // Handle cancel
 function handleCancel() {
     editorWindow?.hide()
 }
 
-// Handle reset
+// Handle reset - zurück zu einer einzelnen Kachel
 function handleReset() {
-    currentLayout = cloneLayout(originalLayout)
-    hasChanges = false
+    currentLayout = {
+        name: currentLayout.name,
+        spacing: currentLayout.spacing,
+        zones: [{
+            index: 0,
+            name: "Zone 1",
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1
+        }]
+    }
+    hasChanges = true
     updateZoneDisplay()
 }
 
@@ -668,7 +762,7 @@ async function getMonitorGeometry(): Promise<MonitorGeometry> {
     }
 }
 
-// Create toolbar with save/cancel/reset buttons
+// Create toolbar with reset/cancel/config buttons
 function createToolbar(): Gtk.Box {
     const toolbar = new Gtk.Box({ spacing: 12 })
     toolbar.get_style_context().add_class("toolbar")
@@ -686,16 +780,15 @@ function createToolbar(): Gtk.Box {
     cancelBtn.get_style_context().add_class("toolbar-cancel")
     cancelBtn.connect("clicked", handleCancel)
 
-    // Save button
-    saveButton = new Gtk.Button({ label: "Save" })
-    saveButton.get_style_context().add_class("toolbar-button")
-    saveButton.get_style_context().add_class("toolbar-save")
-    saveButton.set_sensitive(false)
-    saveButton.connect("clicked", handleSave)
+    // Config button - opens layout management dialog
+    const configBtn = new Gtk.Button({ label: "Config" })
+    configBtn.get_style_context().add_class("toolbar-button")
+    configBtn.get_style_context().add_class("toolbar-save")
+    configBtn.connect("clicked", showLayoutPanel)
 
     toolbar.pack_start(resetBtn, false, false, 0)
     toolbar.pack_start(cancelBtn, false, false, 0)
-    toolbar.pack_start(saveButton, false, false, 0)
+    toolbar.pack_start(configBtn, false, false, 0)
 
     return toolbar
 }
