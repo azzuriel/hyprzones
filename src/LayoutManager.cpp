@@ -186,6 +186,7 @@ bool LayoutManager::saveLayouts(const std::string& path, const std::vector<Layou
     for (const auto& layout : layouts) {
         file << "[[layouts]]\n";
         file << "name = \"" << layout.name << "\"\n";
+        file << "spacing = " << layout.spacing << "\n";
 
         if (!layout.hotkey.empty()) {
             file << "hotkey = \"" << layout.hotkey << "\"\n";
@@ -292,6 +293,7 @@ std::vector<Layout> LayoutManager::loadLayouts(const std::string& path) {
             else if (key == "height") currentZone.height = std::stod(value) / 100.0;
         } else if (inLayout) {
             if (key == "name") currentLayout.name = parseString(value);
+            else if (key == "spacing") currentLayout.spacing = std::stoi(value);
             else if (key == "hotkey") currentLayout.hotkey = parseString(value);
             else if (key == "template") currentLayout.templateType = parseString(value);
             else if (key == "columns") currentLayout.columns = std::stoi(value);

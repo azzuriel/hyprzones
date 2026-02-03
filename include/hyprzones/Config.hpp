@@ -28,7 +28,6 @@ struct Config {
     Color inactiveColor   = {0.4f, 0.4f, 0.4f, 0.2f};
     Color numberColor     = {1.0f, 1.0f, 1.0f, 0.9f};
     int   borderWidth     = 3;
-    int   zoneGap         = 10;
 
     // Behavior
     bool moveToLastKnownZone = true;

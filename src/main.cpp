@@ -145,7 +145,7 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
             auto area = getUsableMonitorArea(monitor.get());
             g_zoneManager->computeZonePixels(*layout,
                 area.x, area.y, area.w, area.h,
-                g_config.zoneGap);
+                layout->spacing);
         }
     }
 
@@ -202,7 +202,7 @@ static void onMouseButton(void*, SCallbackInfo&, std::any data) {
                         auto area = getUsableMonitorArea(monitor.get());
                         g_zoneManager->computeZonePixels(*layout,
                             area.x, area.y, area.w, area.h,
-                            g_config.zoneGap);
+                            layout->spacing);
                     }
 
                     // Get combined zone box
@@ -303,7 +303,7 @@ static void onRender(void*, SCallbackInfo&, std::any data) {
     auto area = getUsableMonitorArea(monitor);
     g_zoneManager->computeZonePixels(*layout,
         area.x, area.y, area.w, area.h,
-        g_config.zoneGap);
+        layout->spacing);
 
     // Render the overlay
     g_renderer->renderOverlay(monitor, *layout, g_dragState.selectedZones, g_config);
@@ -359,7 +359,7 @@ static std::string cmdMoveto(eHyprCtlOutputFormat, std::string args) {
         auto area = getUsableMonitorArea(monitor.get());
         g_zoneManager->computeZonePixels(*layout,
             area.x, area.y, area.w, area.h,
-            g_config.zoneGap);
+            layout->spacing);
     }
 
     const auto& zone = layout->zones[zoneIndex];
@@ -462,7 +462,7 @@ static SDispatchResult dispatchShowZones(std::string) {
                 auto area = getUsableMonitorArea(monitor.get());
                 g_zoneManager->computeZonePixels(*layout,
                     area.x, area.y, area.w, area.h,
-                    g_config.zoneGap);
+                    layout->spacing);
             }
         }
     }
@@ -544,8 +544,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         Hyprlang::STRING{"SHIFT"});
     HyprlandAPI::addConfigValue(g_handle, "plugin:hyprzones:show_on_drag",
         Hyprlang::INT{1});
-    HyprlandAPI::addConfigValue(g_handle, "plugin:hyprzones:zone_gap",
-        Hyprlang::INT{10});
 
     // Register hyprctl commands
     HyprlandAPI::registerHyprCtlCommand(g_handle,
