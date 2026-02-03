@@ -16,7 +16,8 @@ const SPLITTER_THICKNESS = 12
 // Default layout if none exists
 const DEFAULT_LAYOUT: Layout = {
     name: 'default',
-    spacing: 30,
+    spacingH: 40,
+    spacingV: 10,
     zones: [
         { index: 0, name: 'Left', x: 0, y: 0, width: 0.5, height: 1 },
         { index: 1, name: 'Right', x: 0.5, y: 0, width: 0.5, height: 1 }
@@ -99,7 +100,7 @@ function updateZoneDisplay() {
     const topOffset = monitor.y - HEADER_BAR_HEIGHT
 
     for (const zone of currentLayout.zones) {
-        const rect = zoneToPixels(zone, monitor, currentLayout.spacing, gridBounds)
+        const rect = zoneToPixels(zone, monitor, currentLayout.spacingH, currentLayout.spacingV, gridBounds)
         const zoneWidget = createZoneWidget(zone, rect)
         zoneContainer.put(zoneWidget, monitor.x + rect.x, topOffset + rect.y)
     }
@@ -107,7 +108,7 @@ function updateZoneDisplay() {
     // Draw bounded splitters (same offset as zones)
     const splitterSegments = getSplitterSegments(currentLayout.zones)
     for (const segment of splitterSegments) {
-        const pixelSplitter = splitterToPixels(segment, monitor, currentLayout.spacing, gridBounds, SPLITTER_THICKNESS)
+        const pixelSplitter = splitterToPixels(segment, monitor, currentLayout.spacingH, currentLayout.spacingV, gridBounds, SPLITTER_THICKNESS)
         const splitter = createSplitterWidget(pixelSplitter)
         zoneContainer.put(splitter, monitor.x + pixelSplitter.x, topOffset + pixelSplitter.y)
     }
@@ -986,7 +987,8 @@ function handleCancel() {
 function handleReset() {
     currentLayout = {
         name: currentLayout.name,
-        spacing: currentLayout.spacing,
+        spacingH: currentLayout.spacingH,
+        spacingV: currentLayout.spacingV,
         zones: [{
             index: 0,
             name: "Zone 1",

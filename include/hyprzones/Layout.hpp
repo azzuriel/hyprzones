@@ -9,7 +9,8 @@ namespace HyprZones {
 struct Layout {
     std::string       name;
     std::string       hotkey;     // e.g., "SUPER+CTRL+1"
-    int               spacing;  // Gap between zones in pixels (from config)
+    int               spacingH = 40;  // Horizontal gap between zones in pixels
+    int               spacingV = 10;  // Vertical gap between zones in pixels
     std::vector<Zone> zones;
 
     // Template type: "columns", "rows", "grid", "priority-grid", "custom"

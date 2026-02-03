@@ -46,12 +46,14 @@ export function collectGridBoundaries(zones: Zone[]): { x: number[]; y: number[]
 export function zoneToPixels(
     zone: Zone,
     monitor: MonitorGeometry,
-    spacing: number,
+    spacingH: number,
+    spacingV: number,
     _gridLines: { x: number[]; y: number[] }
 ): PixelRect {
     // Simple calculation: percentage of monitor size
     // Spacing is applied as inset on internal edges only
-    const halfGap = spacing / 2;
+    const halfGapH = spacingH / 2;
+    const halfGapV = spacingV / 2;
 
     const rawX = zone.x * monitor.width;
     const rawY = zone.y * monitor.height;
@@ -59,10 +61,10 @@ export function zoneToPixels(
     const rawH = zone.height * monitor.height;
 
     // Inset by half-gap on internal edges (not at 0 or 1)
-    const leftInset = zone.x > 0.001 ? halfGap : 0;
-    const rightInset = (zone.x + zone.width) < 0.999 ? halfGap : 0;
-    const topInset = zone.y > 0.001 ? halfGap : 0;
-    const bottomInset = (zone.y + zone.height) < 0.999 ? halfGap : 0;
+    const leftInset = zone.x > 0.001 ? halfGapH : 0;
+    const rightInset = (zone.x + zone.width) < 0.999 ? halfGapH : 0;
+    const topInset = zone.y > 0.001 ? halfGapV : 0;
+    const bottomInset = (zone.y + zone.height) < 0.999 ? halfGapV : 0;
 
     return {
         x: rawX + leftInset,
@@ -76,7 +78,8 @@ export function zoneToPixels(
 export function splitterToPixels(
     segment: SplitterSegment,
     monitor: MonitorGeometry,
-    _spacing: number,
+    _spacingH: number,
+    _spacingV: number,
     _gridLines: { x: number[]; y: number[] },
     handleThickness: number = 10
 ): PixelSplitter {

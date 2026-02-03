@@ -9,7 +9,7 @@ class ZoneManager {
   public:
     // Compute pixel coordinates for zones based on monitor geometry
     void computeZonePixels(Layout& layout, double monitorX, double monitorY,
-                           double monitorW, double monitorH, int gap);
+                           double monitorW, double monitorH, int spacingH, int spacingV);
 
     // Find which zone(s) contain a point
     std::vector<int> getZonesAtPoint(const Layout& layout, double px, double py);

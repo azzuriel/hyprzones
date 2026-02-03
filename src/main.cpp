@@ -145,7 +145,7 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
             auto area = getUsableMonitorArea(monitor.get());
             g_zoneManager->computeZonePixels(*layout,
                 area.x, area.y, area.w, area.h,
-                layout->spacing);
+                layout->spacingH, layout->spacingV);
         }
     }
 
@@ -202,7 +202,7 @@ static void onMouseButton(void*, SCallbackInfo&, std::any data) {
                         auto area = getUsableMonitorArea(monitor.get());
                         g_zoneManager->computeZonePixels(*layout,
                             area.x, area.y, area.w, area.h,
-                            layout->spacing);
+                            layout->spacingH, layout->spacingV);
                     }
 
                     // Get combined zone box
@@ -303,7 +303,7 @@ static void onRender(void*, SCallbackInfo&, std::any data) {
     auto area = getUsableMonitorArea(monitor);
     g_zoneManager->computeZonePixels(*layout,
         area.x, area.y, area.w, area.h,
-        layout->spacing);
+        layout->spacingH, layout->spacingV);
 
     // Render the overlay
     g_renderer->renderOverlay(monitor, *layout, g_dragState.selectedZones, g_config);
@@ -359,7 +359,7 @@ static std::string cmdMoveto(eHyprCtlOutputFormat, std::string args) {
         auto area = getUsableMonitorArea(monitor.get());
         g_zoneManager->computeZonePixels(*layout,
             area.x, area.y, area.w, area.h,
-            layout->spacing);
+            layout->spacingH, layout->spacingV);
     }
 
     const auto& zone = layout->zones[zoneIndex];
@@ -462,7 +462,7 @@ static SDispatchResult dispatchShowZones(std::string) {
                 auto area = getUsableMonitorArea(monitor.get());
                 g_zoneManager->computeZonePixels(*layout,
                     area.x, area.y, area.w, area.h,
-                    layout->spacing);
+                    layout->spacingH, layout->spacingV);
             }
         }
     }

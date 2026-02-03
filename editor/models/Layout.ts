@@ -12,7 +12,8 @@ export interface Zone {
 export interface Layout {
     name: string;
     zones: Zone[];
-    spacing: number;
+    spacingH: number;  // Horizontal gap between zones (default 40)
+    spacingV: number;  // Vertical gap between zones (default 10)
 }
 
 // Mapping: which layout to use for a specific monitor/workspace combination
@@ -35,7 +36,8 @@ export interface SplitterSegment {
 export function cloneLayout(layout: Layout): Layout {
     return {
         name: layout.name,
-        spacing: layout.spacing,
+        spacingH: layout.spacingH,
+        spacingV: layout.spacingV,
         zones: layout.zones.map(z => ({ ...z }))
     };
 }

@@ -173,7 +173,7 @@ function parseAllTomlLayouts(content: string): Layout[] {
                     layouts.push(currentLayout);
                 }
             }
-            currentLayout = { name: 'unnamed', spacing: 30, zones: [] };
+            currentLayout = { name: 'unnamed', spacingH: 40, spacingV: 10, zones: [] };
             currentZone = null;
             zoneIndex = 0;
             continue;
@@ -207,7 +207,8 @@ function parseAllTomlLayouts(content: string): Layout[] {
             } else {
                 switch (key) {
                     case 'name': currentLayout.name = cleanValue; break;
-                    case 'spacing': currentLayout.spacing = parseInt(cleanValue); break;
+                    case 'spacing_h': currentLayout.spacingH = parseInt(cleanValue); break;
+                    case 'spacing_v': currentLayout.spacingV = parseInt(cleanValue); break;
                 }
             }
         }
@@ -369,7 +370,8 @@ function configToToml(layouts: Layout[], mappings: LayoutMapping[]): string {
 
         content += '[[layouts]]\n';
         content += `name = "${normalized.name}"\n`;
-        content += `spacing = ${normalized.spacing}\n`;
+        content += `spacing_h = ${normalized.spacingH}\n`;
+        content += `spacing_v = ${normalized.spacingV}\n`;
 
         for (const zone of normalized.zones) {
             content += '\n[[layouts.zones]]\n';

@@ -6,11 +6,13 @@
 namespace HyprZones {
 
 void ZoneManager::computeZonePixels(Layout& layout, double monitorX, double monitorY,
-                                    double monitorW, double monitorH, int spacing) {
+                                    double monitorW, double monitorH, int spacingH, int spacingV) {
     // FancyZones-style spacing:
     // - spacing at monitor edges AND between adjacent zones
     // - For n grid lines: usable_space = total - spacing * n
     // - Zone positions account for accumulated spacing at each grid line
+    // - spacingH = horizontal gaps (between columns)
+    // - spacingV = vertical gaps (between rows)
 
     // Collect unique X and Y boundaries (grid lines)
     std::set<double> xLines, yLines;
@@ -30,8 +32,8 @@ void ZoneManager::computeZonePixels(Layout& layout, double monitorX, double moni
     int ySlots = static_cast<int>(yVec.size());
 
     // Usable space after all spacing is removed
-    double usableW = monitorW - (spacing * xSlots);
-    double usableH = monitorH - (spacing * ySlots);
+    double usableW = monitorW - (spacingH * xSlots);
+    double usableH = monitorH - (spacingV * ySlots);
 
     for (auto& zone : layout.zones) {
         // Find index of zone's start boundary in grid
@@ -50,12 +52,12 @@ void ZoneManager::computeZonePixels(Layout& layout, double monitorX, double moni
         // Calculate pixel positions:
         // - Position = usable_space * percent + spacing * (grid_line_index + 1)
         // - The +1 accounts for the leading edge spacing
-        zone.pixelX = monitorX + (zone.x * usableW) + (spacing * (xStartIdx + 1));
-        zone.pixelY = monitorY + (zone.y * usableH) + (spacing * (yStartIdx + 1));
+        zone.pixelX = monitorX + (zone.x * usableW) + (spacingH * (xStartIdx + 1));
+        zone.pixelY = monitorY + (zone.y * usableH) + (spacingV * (yStartIdx + 1));
 
         // Width/Height spans from start to end grid line
-        double endX = monitorX + ((zone.x + zone.width) * usableW) + (spacing * xEndIdx);
-        double endY = monitorY + ((zone.y + zone.height) * usableH) + (spacing * yEndIdx);
+        double endX = monitorX + ((zone.x + zone.width) * usableW) + (spacingH * xEndIdx);
+        double endY = monitorY + ((zone.y + zone.height) * usableH) + (spacingV * yEndIdx);
 
         zone.pixelW = endX - zone.pixelX;
         zone.pixelH = endY - zone.pixelY;
