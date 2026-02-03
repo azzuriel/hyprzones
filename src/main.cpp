@@ -487,25 +487,25 @@ static SDispatchResult dispatchHideZones(std::string) {
     return result;
 }
 
-// Dispatcher: Toggle editor (open if closed, close if open)
+// Dispatcher: Toggle editor (uses AGS instance messaging)
 static SDispatchResult dispatchEditor(std::string) {
     SDispatchResult result;
 
-    // Check if editor is running by looking for ags process with hyprzones
-    FILE* fp = popen("pgrep -f 'ags.*hyprzones/editor'", "r");
+    // Try to send toggle request to existing instance
+    // If instance doesn't exist, ags request will fail and we start a new one
+    FILE* fp = popen("ags request -i hyprzones-editor toggle 2>&1", "r");
     if (fp) {
-        char buf[32];
-        bool running = (fgets(buf, sizeof(buf), fp) != nullptr);
-        pclose(fp);
+        char buf[256];
+        std::string response;
+        while (fgets(buf, sizeof(buf), fp) != nullptr) {
+            response += buf;
+        }
+        int status = pclose(fp);
 
-        if (running) {
-            // Editor is running - kill it
-            if (fork() == 0) {
-                execlp("pkill", "pkill", "-f", "ags.*hyprzones/editor", nullptr);
-                _exit(1);
-            }
-        } else {
-            // Editor not running - start it
+        // If request failed (instance not running), start new editor
+        if (status != 0 || response.find("Error") != std::string::npos ||
+            response.find("error") != std::string::npos ||
+            response.find("not running") != std::string::npos) {
             if (fork() == 0) {
                 execlp("bash", "bash", "-c",
                     "ags run /mnt/code/SRC/GITHUB/hyprzones/editor/app.ts 2>/dev/null || "
