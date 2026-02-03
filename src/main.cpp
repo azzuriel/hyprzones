@@ -13,6 +13,8 @@
 #include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/SharedDefs.hpp>
 
+#include <unistd.h>
+
 #include "hyprzones/Globals.hpp"
 #include "hyprzones/Config.hpp"
 #include "hyprzones/DragState.hpp"
@@ -407,6 +409,22 @@ static SDispatchResult dispatchHideZones(std::string) {
     return result;
 }
 
+// Dispatcher: Open editor
+static SDispatchResult dispatchEditor(std::string) {
+    SDispatchResult result;
+    // Launch the AGS-based editor
+    if (fork() == 0) {
+        // Child process
+        execlp("bash", "bash", "-c",
+            "~/.config/hypr/hyprzones/editor/run.sh || "
+            "/usr/share/hyprzones/editor/run.sh",
+            nullptr);
+        _exit(1);
+    }
+    result.success = true;
+    return result;
+}
+
 // Plugin initialization
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_handle = handle;
@@ -458,6 +476,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:cycle", dispatchCycleLayout);
     HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:show", dispatchShowZones);
     HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:hide", dispatchHideZones);
+    HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:editor", dispatchEditor);
 
     HyprlandAPI::addNotification(
         g_handle,
