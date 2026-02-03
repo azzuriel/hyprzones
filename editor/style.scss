@@ -1,134 +1,188 @@
-// HyprZones Editor Styles
+// HyprZones Editor Styles - ASE Muted Dark Theme
 
-$bg-color: rgba(0, 0, 0, 0.7);
-$zone-color: rgba(0, 100, 255, 0.3);
-$zone-border: rgba(0, 100, 255, 0.8);
-$zone-highlight: rgba(0, 150, 255, 0.5);
-$splitter-color: rgba(255, 255, 255, 0.3);
-$splitter-hover: rgba(255, 255, 255, 0.6);
-$splitter-active: rgba(0, 150, 255, 0.8);
-$text-color: rgba(255, 255, 255, 0.9);
-$button-bg: rgba(50, 50, 50, 0.9);
-$button-hover: rgba(70, 70, 70, 0.9);
+// === SURFACE COLORS ===
+$surface-0: #000000;
+$surface-1: #0a0a0a;
+$surface-2: #121212;
+$surface-3: #1a1a1a;
+$surface-4: #242424;
+$surface-5: #2a2a2a;
+
+// === TEXT COLORS (Muted) ===
+$text-primary: #8a9a9a;
+$text-secondary: #6a7a7a;
+$text-muted: #4a5a5a;
+
+// === BORDER COLORS ===
+$border-primary: #2a2a2a;
+$border-secondary: #1f1f1f;
+$border-active: #3a5a3a;
+$border-hover: #3a5a6a;
+
+// === ACCENT COLORS (Muted Green) ===
+$accent-primary: #2a5a2a;
+$accent-hover: #3a6a3a;
+$accent-active: #4a7a4a;
+
+// === INFO/CYAN ===
+$info: #3a5a6a;
+$info-light: #5a9cb8;
+
+// === ZONE COLORS (Muted Orange) ===
+$zone-fill: rgba(90, 60, 30, 0.15);
+$zone-fill-hover: rgba(90, 60, 30, 0.25);
+$zone-border: rgba(120, 80, 40, 0.6);
+
+// === SPLITTER COLORS ===
+$splitter-color: #2a2a2a;
+$splitter-hover: #3a5a6a;
+$splitter-active: #5a9cb8;
+
+// === BACKDROP ===
+$backdrop: rgba(0, 0, 0, 0.85);
+
+// ============================================
+// EDITOR WINDOW
+// ============================================
 
 .zone-editor {
     background: transparent;
 }
 
 .editor-backdrop {
-    background: $bg-color;
+    background: $backdrop;
 }
 
-.zone {
-    background: $zone-color;
-    border: 2px solid $zone-border;
-    border-radius: 0;
-    position: absolute;
+// ============================================
+// ZONES
+// ============================================
 
-    &.zone-highlighted {
-        background: $zone-highlight;
+.zone {
+    background: $zone-fill;
+    border: 1px solid $zone-border;
+    border-radius: 0px;
+
+    &:hover {
+        background: $zone-fill-hover;
+        border-color: $accent-hover;
     }
 }
 
 .zone-label {
-    color: $text-color;
-    font-size: 14px;
-    font-weight: bold;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    color: $text-secondary;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: "Fira Code", monospace;
 }
+
+.zone-buttons {
+    margin-top: 8px;
+}
+
+.zone-split-btn {
+    padding: 4px 12px;
+    border-radius: 2px;
+    border: 1px solid $border-primary;
+    font-size: 14px;
+    color: $text-secondary;
+    background: $surface-3;
+    min-width: 32px;
+
+    &:hover {
+        background: $surface-4;
+        border-color: $border-hover;
+        color: $text-primary;
+    }
+}
+
+// ============================================
+// SPLITTERS
+// ============================================
 
 .splitter {
     background: transparent;
-    position: absolute;
 
-    &.splitter-vertical {
-        cursor: col-resize;
-
-        .splitter-handle {
-            background: $splitter-color;
-            min-width: 4px;
-            min-height: 100%;
-            margin-left: 2px;
-            border-radius: 2px;
-        }
-
-        &:hover .splitter-handle {
-            background: $splitter-hover;
-        }
-
-        &:active .splitter-handle {
-            background: $splitter-active;
-        }
+    .splitter-handle {
+        background: $splitter-color;
+        border-radius: 1px;
+        transition: background 0.15s;
     }
 
-    &.splitter-horizontal {
-        cursor: row-resize;
+    &:hover .splitter-handle {
+        background: $splitter-hover;
+    }
 
-        .splitter-handle {
-            background: $splitter-color;
-            min-height: 4px;
-            min-width: 100%;
-            margin-top: 2px;
-            border-radius: 2px;
-        }
-
-        &:hover .splitter-handle {
-            background: $splitter-hover;
-        }
-
-        &:active .splitter-handle {
-            background: $splitter-active;
-        }
+    &.dragging .splitter-handle {
+        background: $splitter-active;
     }
 }
 
+.splitter-vertical .splitter-handle {
+    min-width: 3px;
+}
+
+.splitter-horizontal .splitter-handle {
+    min-height: 3px;
+}
+
+// ============================================
+// TOOLBAR
+// ============================================
+
 .toolbar {
-    background: $button-bg;
-    border-radius: 8px;
-    padding: 12px 20px;
-    margin-bottom: 40px;
+    background: $surface-3;
+    border: 1px solid $border-primary;
+    border-radius: 4px;
+    padding: 8px 16px;
 }
 
 .toolbar-button {
-    padding: 8px 20px;
-    border-radius: 4px;
-    border: none;
-    font-size: 14px;
+    padding: 6px 16px;
+    border-radius: 2px;
+    border: 1px solid $border-primary;
+    font-size: 12px;
     font-weight: 500;
-    min-width: 80px;
+    font-family: "Fira Code", monospace;
+    color: $text-primary;
+    background: $surface-4;
+    min-width: 70px;
 
     &:hover {
-        background: $button-hover;
+        background: $surface-5;
+        border-color: $border-hover;
     }
 
     &:disabled {
-        opacity: 0.5;
+        opacity: 0.4;
+        color: $text-muted;
     }
+}
 
-    &.toolbar-save {
-        background: rgba(0, 120, 200, 0.9);
-        color: white;
+.toolbar-save {
+    background: $accent-primary;
+    border-color: $accent-primary;
+    color: $text-primary;
 
-        &:hover {
-            background: rgba(0, 140, 230, 0.9);
-        }
+    &:hover {
+        background: $accent-hover;
+        border-color: $accent-hover;
     }
+}
 
-    &.toolbar-cancel {
-        background: rgba(80, 80, 80, 0.9);
-        color: white;
+.toolbar-cancel {
+    background: $surface-4;
 
-        &:hover {
-            background: rgba(100, 100, 100, 0.9);
-        }
+    &:hover {
+        background: $surface-5;
     }
+}
 
-    &.toolbar-reset {
-        background: rgba(150, 80, 0, 0.9);
-        color: white;
+.toolbar-reset {
+    background: rgba(138, 74, 74, 0.3);
+    border-color: rgba(138, 74, 74, 0.5);
 
-        &:hover {
-            background: rgba(180, 100, 0, 0.9);
-        }
+    &:hover {
+        background: rgba(138, 74, 74, 0.4);
+        border-color: rgba(138, 74, 74, 0.6);
     }
 }

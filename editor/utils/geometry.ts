@@ -1,6 +1,6 @@
 // Geometry calculations for zone positioning
 
-import { Zone, GridLine } from '../models/Layout';
+import { Zone, SplitterSegment } from '../models/Layout';
 
 export interface PixelRect {
     x: number;
@@ -16,67 +16,14 @@ export interface MonitorGeometry {
     height: number;
 }
 
-export function zoneToPixels(
-    zone: Zone,
-    monitor: MonitorGeometry,
-    spacing: number,
-    gridLines: { x: number[]; y: number[] }
-): PixelRect {
-    const xSlots = gridLines.x.length;
-    const ySlots = gridLines.y.length;
-
-    const usableW = monitor.width - (spacing * xSlots);
-    const usableH = monitor.height - (spacing * ySlots);
-
-    const xStartIdx = gridLines.x.filter(v => v < zone.x + 0.001).length;
-    const yStartIdx = gridLines.y.filter(v => v < zone.y + 0.001).length;
-    const xEndIdx = gridLines.x.filter(v => v < zone.x + zone.width + 0.001).length;
-    const yEndIdx = gridLines.y.filter(v => v < zone.y + zone.height + 0.001).length;
-
-    const pixelX = (zone.x * usableW) + (spacing * (xStartIdx + 1));
-    const pixelY = (zone.y * usableH) + (spacing * (yStartIdx + 1));
-    const endX = ((zone.x + zone.width) * usableW) + (spacing * xEndIdx);
-    const endY = ((zone.y + zone.height) * usableH) + (spacing * yEndIdx);
-
-    return {
-        x: pixelX,
-        y: pixelY,
-        width: endX - pixelX,
-        height: endY - pixelY
-    };
-}
-
-export function gridLineToPixel(
-    line: GridLine,
-    monitor: MonitorGeometry,
-    spacing: number,
-    gridLines: { x: number[]; y: number[] }
-): number {
-    if (line.orientation === 'vertical') {
-        const xSlots = gridLines.x.length;
-        const usableW = monitor.width - (spacing * xSlots);
-        const idx = gridLines.x.filter(v => v < line.position + 0.001).length;
-        return (line.position * usableW) + (spacing * idx);
-    } else {
-        const ySlots = gridLines.y.length;
-        const usableH = monitor.height - (spacing * ySlots);
-        const idx = gridLines.y.filter(v => v < line.position + 0.001).length;
-        return (line.position * usableH) + (spacing * idx);
-    }
-}
-
-export function pixelToPercent(
-    pixel: number,
-    totalSize: number,
-    spacing: number,
-    slots: number
-): number {
-    const usable = totalSize - (spacing * slots);
-    return Math.max(0, Math.min(1, pixel / usable));
-}
-
-export function clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
+// Splitter segment in pixel coordinates
+export interface PixelSplitter {
+    orientation: 'horizontal' | 'vertical';
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    segment: SplitterSegment;  // Reference to original segment
 }
 
 export function collectGridBoundaries(zones: Zone[]): { x: number[]; y: number[] } {
@@ -94,4 +41,85 @@ export function collectGridBoundaries(zones: Zone[]): { x: number[]; y: number[]
         x: [...xSet].sort((a, b) => a - b),
         y: [...ySet].sort((a, b) => a - b)
     };
+}
+
+export function zoneToPixels(
+    zone: Zone,
+    monitor: MonitorGeometry,
+    spacing: number,
+    _gridLines: { x: number[]; y: number[] }
+): PixelRect {
+    // Simple calculation: percentage of monitor size
+    // Spacing is applied as inset on internal edges only
+    const halfGap = spacing / 2;
+
+    const rawX = zone.x * monitor.width;
+    const rawY = zone.y * monitor.height;
+    const rawW = zone.width * monitor.width;
+    const rawH = zone.height * monitor.height;
+
+    // Inset by half-gap on internal edges (not at 0 or 1)
+    const leftInset = zone.x > 0.001 ? halfGap : 0;
+    const rightInset = (zone.x + zone.width) < 0.999 ? halfGap : 0;
+    const topInset = zone.y > 0.001 ? halfGap : 0;
+    const bottomInset = (zone.y + zone.height) < 0.999 ? halfGap : 0;
+
+    return {
+        x: rawX + leftInset,
+        y: rawY + topInset,
+        width: rawW - leftInset - rightInset,
+        height: rawH - topInset - bottomInset
+    };
+}
+
+// Convert a bounded splitter segment to pixel coordinates
+export function splitterToPixels(
+    segment: SplitterSegment,
+    monitor: MonitorGeometry,
+    _spacing: number,
+    _gridLines: { x: number[]; y: number[] },
+    handleThickness: number = 10
+): PixelSplitter {
+    // Simple calculation: percentage of monitor size
+    if (segment.orientation === 'vertical') {
+        const pixelX = segment.position * monitor.width - handleThickness / 2;
+        const pixelYStart = segment.start * monitor.height;
+        const pixelYEnd = segment.end * monitor.height;
+
+        return {
+            orientation: 'vertical',
+            x: pixelX,
+            y: pixelYStart,
+            width: handleThickness,
+            height: pixelYEnd - pixelYStart,
+            segment
+        };
+    } else {
+        const pixelY = segment.position * monitor.height - handleThickness / 2;
+        const pixelXStart = segment.start * monitor.width;
+        const pixelXEnd = segment.end * monitor.width;
+
+        return {
+            orientation: 'horizontal',
+            x: pixelXStart,
+            y: pixelY,
+            width: pixelXEnd - pixelXStart,
+            height: handleThickness,
+            segment
+        };
+    }
+}
+
+export function pixelToPercent(
+    pixel: number,
+    totalSize: number,
+    spacing: number,
+    slots: number
+): number {
+    const usable = totalSize - (spacing * slots);
+    return Math.max(0, Math.min(1, pixel / usable));
+}
+
+export function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
 }

@@ -414,10 +414,11 @@ static SDispatchResult dispatchEditor(std::string) {
     SDispatchResult result;
     // Launch the AGS-based editor
     if (fork() == 0) {
-        // Child process
+        // Child process - try multiple locations
         execlp("bash", "bash", "-c",
-            "~/.config/hypr/hyprzones/editor/run.sh || "
-            "/usr/share/hyprzones/editor/run.sh",
+            "ags run /mnt/code/SRC/GITHUB/hyprzones/editor/app.ts 2>/dev/null || "
+            "ags run ~/.config/hyprzones/editor/app.ts 2>/dev/null || "
+            "ags run /usr/share/hyprzones/editor/app.ts",
             nullptr);
         _exit(1);
     }

@@ -10,5 +10,8 @@ if ! command -v ags &> /dev/null; then
     exit 1
 fi
 
+# Kill any existing editor instance
+ags quit -i hyprzones-editor 2>/dev/null || true
+
 # Run the editor
 exec ags run "$SCRIPT_DIR/app.ts"

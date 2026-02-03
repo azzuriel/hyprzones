@@ -1,25 +1,27 @@
 // Layout persistence - load/save layouts from config file
 
-import { readFileAsync, writeFileAsync } from 'astal/file';
+import GLib from "gi://GLib"
 import { Layout, Zone } from '../models/Layout';
-import { GLib } from 'astal';
 
 const CONFIG_PATH = GLib.get_home_dir() + '/.config/hypr/hyprzones.toml';
 
-export async function loadLayoutFromConfig(): Promise<Layout | null> {
+export function loadLayoutFromConfig(): Layout | null {
     try {
-        const content = await readFileAsync(CONFIG_PATH);
-        return parseTomlLayout(content);
+        const [ok, contents] = GLib.file_get_contents(CONFIG_PATH);
+        if (ok && contents) {
+            const content = new TextDecoder().decode(contents);
+            return parseTomlLayout(content);
+        }
     } catch (e) {
         console.error('Failed to load config:', e);
-        return null;
     }
+    return null;
 }
 
-export async function saveLayoutToConfig(layout: Layout): Promise<boolean> {
+export function saveLayoutToConfig(layout: Layout): boolean {
     try {
         const content = layoutToToml(layout);
-        await writeFileAsync(CONFIG_PATH, content);
+        GLib.file_set_contents(CONFIG_PATH, content);
         return true;
     } catch (e) {
         console.error('Failed to save config:', e);
@@ -37,16 +39,32 @@ function parseTomlLayout(content: string): Layout | null {
     const lines = content.split('\n');
     let currentZone: Partial<Zone> | null = null;
     let zoneIndex = 0;
+    let inFirstLayout = false;
+    let firstLayoutFound = false;
 
     for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith('#')) continue;
 
+        // New layout section
         if (trimmed === '[[layouts]]') {
+            if (firstLayoutFound) {
+                // We hit a second layout - save current zone and stop
+                if (currentZone && currentZone.name) {
+                    layout.zones.push(currentZone as Zone);
+                    currentZone = null;
+                }
+                break;
+            }
+            firstLayoutFound = true;
+            inFirstLayout = true;
             continue;
         }
 
+        // Zone section within layout
         if (trimmed === '[[layouts.zones]]') {
+            if (!inFirstLayout) continue;
+
             if (currentZone && currentZone.name) {
                 layout.zones.push(currentZone as Zone);
             }
@@ -54,12 +72,13 @@ function parseTomlLayout(content: string): Layout | null {
             continue;
         }
 
+        // Parse key=value
         const match = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
         if (match) {
             const [, key, value] = match;
             const cleanValue = value.replace(/"/g, '').trim();
 
-            if (currentZone) {
+            if (currentZone && inFirstLayout) {
                 switch (key) {
                     case 'name': currentZone.name = cleanValue; break;
                     case 'x': currentZone.x = parseFloat(cleanValue) / 100; break;
@@ -67,7 +86,7 @@ function parseTomlLayout(content: string): Layout | null {
                     case 'width': currentZone.width = parseFloat(cleanValue) / 100; break;
                     case 'height': currentZone.height = parseFloat(cleanValue) / 100; break;
                 }
-            } else {
+            } else if (inFirstLayout && !currentZone) {
                 switch (key) {
                     case 'name': layout.name = cleanValue; break;
                     case 'spacing': layout.spacing = parseInt(cleanValue); break;
@@ -76,7 +95,8 @@ function parseTomlLayout(content: string): Layout | null {
         }
     }
 
-    if (currentZone && currentZone.name) {
+    // Don't forget the last zone if we didn't hit another [[layouts]]
+    if (currentZone && currentZone.name && inFirstLayout) {
         layout.zones.push(currentZone as Zone);
     }
 

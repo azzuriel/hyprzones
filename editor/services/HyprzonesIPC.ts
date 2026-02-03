@@ -1,7 +1,6 @@
 // IPC communication with hyprzones plugin via hyprctl
 
-import { execAsync } from 'astal';
-import { Layout, Zone } from '../models/Layout';
+import { execAsync } from "ags/process"
 
 export async function getLayouts(): Promise<string[]> {
     try {
@@ -16,7 +15,7 @@ export async function getLayouts(): Promise<string[]> {
 
 export async function reloadConfig(): Promise<boolean> {
     try {
-        await execAsync(['hyprctl', 'hyprzones:reload']);
+        await execAsync(['hyprctl', 'dispatch', 'hyprzones:reload']);
         return true;
     } catch (e) {
         console.error('Failed to reload config:', e);
@@ -26,7 +25,7 @@ export async function reloadConfig(): Promise<boolean> {
 
 export async function saveLayout(path: string): Promise<boolean> {
     try {
-        await execAsync(['hyprctl', `hyprzones:save ${path}`]);
+        await execAsync(['hyprctl', 'dispatch', `hyprzones:save ${path}`]);
         return true;
     } catch (e) {
         console.error('Failed to save layout:', e);

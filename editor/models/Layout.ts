@@ -15,10 +15,14 @@ export interface Layout {
     spacing: number;
 }
 
-export interface GridLine {
-    position: number;   // 0.0 - 1.0
+// A splitter segment - bounded line that separates adjacent zones
+export interface SplitterSegment {
     orientation: 'horizontal' | 'vertical';
-    index: number;
+    position: number;       // x for vertical, y for horizontal (0.0 - 1.0)
+    start: number;          // start bound (y for vertical, x for horizontal)
+    end: number;            // end bound
+    leftZones: number[];    // zone indices on left/top side
+    rightZones: number[];   // zone indices on right/bottom side
 }
 
 export function cloneLayout(layout: Layout): Layout {
@@ -29,33 +33,85 @@ export function cloneLayout(layout: Layout): Layout {
     };
 }
 
-export function getGridLines(zones: Zone[]): GridLine[] {
-    const xLines = new Set<number>();
-    const yLines = new Set<number>();
+// Find splitter segments at shared zone boundaries
+// Each splitter only controls the boundary between exactly two adjacent zones
+export function getSplitterSegments(zones: Zone[]): SplitterSegment[] {
+    const segments: SplitterSegment[] = [];
+    const epsilon = 0.001;
 
-    for (const zone of zones) {
-        xLines.add(zone.x);
-        xLines.add(zone.x + zone.width);
-        yLines.add(zone.y);
-        yLines.add(zone.y + zone.height);
+    // For each pair of zones, check if they share an edge
+    for (let i = 0; i < zones.length; i++) {
+        for (let j = i + 1; j < zones.length; j++) {
+            const a = zones[i];
+            const b = zones[j];
+
+            // Check for vertical edge (zones side by side)
+            // A's right edge touches B's left edge
+            if (Math.abs((a.x + a.width) - b.x) < epsilon) {
+                const overlapStart = Math.max(a.y, b.y);
+                const overlapEnd = Math.min(a.y + a.height, b.y + b.height);
+                if (overlapEnd - overlapStart > epsilon) {
+                    // Each pair gets its own splitter - no merging
+                    segments.push({
+                        orientation: 'vertical',
+                        position: a.x + a.width,
+                        start: overlapStart,
+                        end: overlapEnd,
+                        leftZones: [i],
+                        rightZones: [j]
+                    });
+                }
+            }
+            // B's right edge touches A's left edge
+            if (Math.abs((b.x + b.width) - a.x) < epsilon) {
+                const overlapStart = Math.max(a.y, b.y);
+                const overlapEnd = Math.min(a.y + a.height, b.y + b.height);
+                if (overlapEnd - overlapStart > epsilon) {
+                    segments.push({
+                        orientation: 'vertical',
+                        position: b.x + b.width,
+                        start: overlapStart,
+                        end: overlapEnd,
+                        leftZones: [j],
+                        rightZones: [i]
+                    });
+                }
+            }
+
+            // Check for horizontal edge (zones stacked)
+            // A's bottom edge touches B's top edge
+            if (Math.abs((a.y + a.height) - b.y) < epsilon) {
+                const overlapStart = Math.max(a.x, b.x);
+                const overlapEnd = Math.min(a.x + a.width, b.x + b.width);
+                if (overlapEnd - overlapStart > epsilon) {
+                    segments.push({
+                        orientation: 'horizontal',
+                        position: a.y + a.height,
+                        start: overlapStart,
+                        end: overlapEnd,
+                        leftZones: [i],
+                        rightZones: [j]
+                    });
+                }
+            }
+            // B's bottom edge touches A's top edge
+            if (Math.abs((b.y + b.height) - a.y) < epsilon) {
+                const overlapStart = Math.max(a.x, b.x);
+                const overlapEnd = Math.min(a.x + a.width, b.x + b.width);
+                if (overlapEnd - overlapStart > epsilon) {
+                    segments.push({
+                        orientation: 'horizontal',
+                        position: b.y + b.height,
+                        start: overlapStart,
+                        end: overlapEnd,
+                        leftZones: [j],
+                        rightZones: [i]
+                    });
+                }
+            }
+        }
     }
 
-    const lines: GridLine[] = [];
-    let idx = 0;
-
-    // Vertical lines (x positions) - skip edges
-    [...xLines].sort((a, b) => a - b).forEach(x => {
-        if (x > 0.001 && x < 0.999) {
-            lines.push({ position: x, orientation: 'vertical', index: idx++ });
-        }
-    });
-
-    // Horizontal lines (y positions) - skip edges
-    [...yLines].sort((a, b) => a - b).forEach(y => {
-        if (y > 0.001 && y < 0.999) {
-            lines.push({ position: y, orientation: 'horizontal', index: idx++ });
-        }
-    });
-
-    return lines;
+    return segments;
 }
+

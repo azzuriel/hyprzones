@@ -1,52 +1,43 @@
-// HyprZones Editor - AGS application entry point
+// HyprZones Editor - AGS v3 application entry point
 
-import { App } from 'astal/gtk4';
-import { getCurrentMonitor } from './services/HyprzonesIPC';
-import { loadLayoutFromConfig } from './services/LayoutService';
-import ZoneEditor from './windows/ZoneEditor';
-import { Layout } from './models/Layout';
+import app from "ags/gtk3/app"
+import style from "./style.scss"
+import ZoneEditor from "./widget/ZoneEditor"
 
-// Default layout if none exists
-const DEFAULT_LAYOUT: Layout = {
-    name: 'default',
-    spacing: 10,
-    zones: [
-        { index: 0, name: 'Left', x: 0, y: 0, width: 0.5, height: 1 },
-        { index: 1, name: 'Right', x: 0.5, y: 0, width: 0.5, height: 1 }
-    ]
-};
+let editorWindow: any = null
 
-async function main() {
-    const monitor = await getCurrentMonitor();
-    if (!monitor) {
-        console.error('No monitor found');
-        App.quit();
-        return;
-    }
+app.start({
+    css: style,
+    instanceName: "hyprzones-editor",
+    async main() {
+        try {
+            editorWindow = await ZoneEditor()
+            editorWindow.show()
+            console.log("HyprZones Editor started")
+        } catch (e) {
+            console.error("Failed to create Zone Editor:", e)
+        }
+    },
+    requestHandler(request: any, res: (response: any) => void) {
+        const reqStr = Array.isArray(request) ? request.join(" ") : String(request)
 
-    let layout = await loadLayoutFromConfig();
-    if (!layout) {
-        layout = DEFAULT_LAYOUT;
-    }
-
-    const closeEditor = () => {
-        App.quit();
-    };
-
-    ZoneEditor({
-        initialLayout: layout,
-        monitor: {
-            x: 0,
-            y: 0,
-            width: monitor.width,
-            height: monitor.height
-        },
-        onClose: closeEditor
-    });
-}
-
-App.start({
-    instanceName: 'hyprzones-editor',
-    css: `${SRC}/style.scss`,
-    main: main
-});
+        if (reqStr.includes("toggle") || reqStr.includes("show")) {
+            if (editorWindow) {
+                if (editorWindow.visible) {
+                    editorWindow.hide()
+                    res("hidden")
+                } else {
+                    editorWindow.show()
+                    res("shown")
+                }
+            } else {
+                res("window not ready")
+            }
+        } else if (reqStr.includes("quit") || reqStr.includes("exit")) {
+            app.quit()
+            res("quit")
+        } else {
+            res("unknown request: " + reqStr)
+        }
+    },
+})
