@@ -8,6 +8,7 @@ commit_pins = [
 
 [hyprzones]
 description = "Zone-based window tiling inspired by FancyZones"
+version = "0.3.2"
 authors = ["Jan Ohlmann (azzuriel)"]
 output = "build/hyprzones.so"
 build = [

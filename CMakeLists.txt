@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.19)
 project(hyprzones
-    VERSION 0.1.0
+    VERSION 0.3.2
     DESCRIPTION "Zone-based window tiling for Hyprland"
     LANGUAGES CXX
 )
