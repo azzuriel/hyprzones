@@ -67,7 +67,7 @@ void Renderer::drawZone(void* monitorPtr, const Zone& zone, bool highlighted, co
     CRectPassElement::SRectData rectData;
     rectData.box = box;
     rectData.color = fillColor;
-    rectData.round = 8;  // Slight rounding for aesthetics
+    rectData.round = 0;
 
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(rectData));
 
@@ -82,7 +82,7 @@ void Renderer::drawZone(void* monitorPtr, const Zone& zone, bool highlighted, co
     CBorderPassElement::SBorderData borderData;
     borderData.box = box;
     borderData.grad1 = grad;
-    borderData.round = 8;
+    borderData.round = 0;
     borderData.borderSize = config.borderWidth;
     borderData.a = m_alpha;
 
