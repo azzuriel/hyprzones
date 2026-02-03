@@ -16,8 +16,8 @@ const SPLITTER_THICKNESS = 12
 // Default layout if none exists
 const DEFAULT_LAYOUT: Layout = {
     name: 'default',
-    spacingH: 40,
-    spacingV: 10,
+    spacingH: 10,
+    spacingV: 40,
     zones: [
         { index: 0, name: 'Left', x: 0, y: 0, width: 0.5, height: 1 },
         { index: 1, name: 'Right', x: 0.5, y: 0, width: 0.5, height: 1 }
@@ -96,8 +96,8 @@ function updateZoneDisplay() {
 
     const gridBounds = collectGridBoundaries(currentLayout.zones)
 
-    // Draw zones (offset by monitor position for margins, minus header bar to start higher)
-    const topOffset = monitor.y - HEADER_BAR_HEIGHT
+    // Draw zones (offset by monitor position for margins)
+    const topOffset = monitor.y
 
     for (const zone of currentLayout.zones) {
         const rect = zoneToPixels(zone, monitor, currentLayout.spacingH, currentLayout.spacingV, gridBounds)
@@ -1056,7 +1056,7 @@ function selectMonitor(mon: HyprMonitor): MonitorGeometry {
         x: MARGIN_LEFT,
         y: MARGIN_TOP,
         width: dims.width - MARGIN_LEFT - MARGIN_RIGHT,
-        height: dims.height - MARGIN_TOP - MARGIN_BOTTOM + HEADER_BAR_HEIGHT
+        height: dims.height - MARGIN_TOP - MARGIN_BOTTOM
     }
 }
 
