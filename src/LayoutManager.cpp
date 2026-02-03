@@ -1,176 +1,148 @@
-/**
- * LayoutManager - Manages layout persistence and switching
- */
-
-#include "hyprzones.hpp"
-#include <fstream>
-#include <filesystem>
+#include "hyprzones/LayoutManager.hpp"
 
 namespace HyprZones {
 
-class LayoutManager {
-public:
-    LayoutManager() = default;
-    ~LayoutManager() = default;
+Layout LayoutManager::generateFromTemplate(const std::string& templateType,
+                                           int cols, int rows,
+                                           const std::string& name) {
+    Layout layout;
+    layout.name         = name.empty() ? templateType : name;
+    layout.templateType = templateType;
+    layout.columns      = cols;
+    layout.rows         = rows;
 
-    /**
-     * Load layouts from config
-     */
-    void loadLayouts(const std::vector<Layout>& layouts) {
-        m_layouts = layouts;
-        m_layoutMap.clear();
-        for (size_t i = 0; i < m_layouts.size(); ++i) {
-            m_layoutMap[m_layouts[i].name] = i;
+    int zoneIndex = 0;
+
+    if (templateType == "columns") {
+        double colWidth = 1.0 / cols;
+        for (int c = 0; c < cols; ++c) {
+            Zone zone;
+            zone.index  = zoneIndex++;
+            zone.name   = "Column " + std::to_string(c + 1);
+            zone.x      = c * colWidth;
+            zone.y      = 0.0;
+            zone.width  = colWidth;
+            zone.height = 1.0;
+            layout.zones.push_back(zone);
         }
-    }
-
-    /**
-     * Get layout by name
-     */
-    const Layout* getLayout(const std::string& name) const {
-        auto it = m_layoutMap.find(name);
-        if (it != m_layoutMap.end()) {
-            return &m_layouts[it->second];
+    } else if (templateType == "rows") {
+        double rowHeight = 1.0 / rows;
+        for (int r = 0; r < rows; ++r) {
+            Zone zone;
+            zone.index  = zoneIndex++;
+            zone.name   = "Row " + std::to_string(r + 1);
+            zone.x      = 0.0;
+            zone.y      = r * rowHeight;
+            zone.width  = 1.0;
+            zone.height = rowHeight;
+            layout.zones.push_back(zone);
         }
-        return nullptr;
-    }
-
-    /**
-     * Get all layout names
-     */
-    std::vector<std::string> getLayoutNames() const {
-        std::vector<std::string> names;
-        names.reserve(m_layouts.size());
-        for (const auto& layout : m_layouts) {
-            names.push_back(layout.name);
-        }
-        return names;
-    }
-
-    /**
-     * Set active layout
-     */
-    bool setActiveLayout(const std::string& name) {
-        auto it = m_layoutMap.find(name);
-        if (it != m_layoutMap.end()) {
-            m_activeLayoutIndex = it->second;
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Get active layout
-     */
-    const Layout* getActiveLayout() const {
-        if (m_activeLayoutIndex >= 0 && m_activeLayoutIndex < static_cast<int>(m_layouts.size())) {
-            return &m_layouts[m_activeLayoutIndex];
-        }
-        return nullptr;
-    }
-
-    /**
-     * Create layout from template
-     */
-    static Layout createFromTemplate(const std::string& name,
-                                     const std::string& templateType,
-                                     int param1 = 0,
-                                     int param2 = 0) {
-        Layout layout;
-        layout.name = name;
-        layout.templateType = templateType;
-
-        if (templateType == "columns") {
-            int cols = param1 > 0 ? param1 : 3;
-            double colWidth = 100.0 / cols;
-            for (int i = 0; i < cols; ++i) {
+    } else if (templateType == "grid") {
+        double colWidth  = 1.0 / cols;
+        double rowHeight = 1.0 / rows;
+        for (int r = 0; r < rows; ++r) {
+            for (int c = 0; c < cols; ++c) {
                 Zone zone;
-                zone.name = "column-" + std::to_string(i + 1);
-                zone.index = i;
-                zone.x = i * colWidth;
-                zone.y = 0;
-                zone.width = colWidth;
-                zone.height = 100;
-                layout.zones.push_back(zone);
-            }
-        }
-        else if (templateType == "rows") {
-            int rows = param1 > 0 ? param1 : 3;
-            double rowHeight = 100.0 / rows;
-            for (int i = 0; i < rows; ++i) {
-                Zone zone;
-                zone.name = "row-" + std::to_string(i + 1);
-                zone.index = i;
-                zone.x = 0;
-                zone.y = i * rowHeight;
-                zone.width = 100;
+                zone.index  = zoneIndex++;
+                zone.name   = "Cell " + std::to_string(r + 1) + "x" + std::to_string(c + 1);
+                zone.x      = c * colWidth;
+                zone.y      = r * rowHeight;
+                zone.width  = colWidth;
                 zone.height = rowHeight;
                 layout.zones.push_back(zone);
             }
         }
-        else if (templateType == "grid") {
-            int cols = param1 > 0 ? param1 : 2;
-            int rows = param2 > 0 ? param2 : 2;
-            double colWidth = 100.0 / cols;
-            double rowHeight = 100.0 / rows;
-            int idx = 0;
-            for (int r = 0; r < rows; ++r) {
-                for (int c = 0; c < cols; ++c) {
-                    Zone zone;
-                    zone.name = "cell-" + std::to_string(r + 1) + "-" + std::to_string(c + 1);
-                    zone.index = idx++;
-                    zone.x = c * colWidth;
-                    zone.y = r * rowHeight;
-                    zone.width = colWidth;
-                    zone.height = rowHeight;
-                    layout.zones.push_back(zone);
-                }
-            }
+    } else if (templateType == "priority-grid") {
+        // Main zone (60%) + side column (40%, 2 rows)
+        Zone main;
+        main.index  = zoneIndex++;
+        main.name   = "Main";
+        main.x      = 0.0;
+        main.y      = 0.0;
+        main.width  = 0.6;
+        main.height = 1.0;
+        layout.zones.push_back(main);
+
+        Zone top;
+        top.index  = zoneIndex++;
+        top.name   = "Top Right";
+        top.x      = 0.6;
+        top.y      = 0.0;
+        top.width  = 0.4;
+        top.height = 0.5;
+        layout.zones.push_back(top);
+
+        Zone bottom;
+        bottom.index  = zoneIndex++;
+        bottom.name   = "Bottom Right";
+        bottom.x      = 0.6;
+        bottom.y      = 0.5;
+        bottom.width  = 0.4;
+        bottom.height = 0.5;
+        layout.zones.push_back(bottom);
+    }
+
+    return layout;
+}
+
+Layout* LayoutManager::getLayoutForMonitor(Config& config,
+                                           const std::string& monitorName,
+                                           int workspace) {
+    for (auto& layout : config.layouts) {
+        bool monitorMatch = layout.monitor.empty() || layout.monitor == monitorName;
+        bool wsMatch      = layout.workspace < 0 || layout.workspace == workspace;
+
+        if (monitorMatch && wsMatch) {
+            return &layout;
         }
-        else if (templateType == "main-side") {
-            // Main area (60%) + sidebar (40%)
-            Zone main;
-            main.name = "main";
-            main.index = 0;
-            main.x = 0;
-            main.y = 0;
-            main.width = 60;
-            main.height = 100;
-            layout.zones.push_back(main);
+    }
 
-            Zone side;
-            side.name = "sidebar";
-            side.index = 1;
-            side.x = 60;
-            side.y = 0;
-            side.width = 40;
-            side.height = 100;
-            layout.zones.push_back(side);
+    if (!config.activeLayout.empty()) {
+        auto it = config.layoutIndex.find(config.activeLayout);
+        if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
+            return &config.layouts[it->second];
         }
-
-        return layout;
     }
 
-    /**
-     * Save custom layouts to JSON file
-     */
-    bool saveToFile(const std::string& path) const {
-        // TODO: Implement JSON serialization
-        return false;
+    if (!config.layouts.empty()) {
+        return &config.layouts[0];
     }
 
-    /**
-     * Load custom layouts from JSON file
-     */
-    bool loadFromFile(const std::string& path) {
-        // TODO: Implement JSON deserialization
-        return false;
+    return nullptr;
+}
+
+void LayoutManager::switchLayout(Config& config, const std::string& layoutName) {
+    auto it = config.layoutIndex.find(layoutName);
+    if (it != config.layoutIndex.end()) {
+        config.activeLayout = layoutName;
+    }
+}
+
+void LayoutManager::cycleLayout(Config& config, int direction) {
+    if (config.layouts.empty()) {
+        return;
     }
 
-private:
-    std::vector<Layout> m_layouts;
-    std::unordered_map<std::string, size_t> m_layoutMap;
-    int m_activeLayoutIndex = -1;
-};
+    auto it = config.layoutIndex.find(config.activeLayout);
+    size_t currentIdx = (it != config.layoutIndex.end()) ? it->second : 0;
 
-} // namespace HyprZones
+    int newIdx = static_cast<int>(currentIdx) + direction;
+    int count  = static_cast<int>(config.layouts.size());
+
+    newIdx = ((newIdx % count) + count) % count;
+
+    config.activeLayout = config.layouts[newIdx].name;
+}
+
+bool LayoutManager::saveLayouts(const std::string& path, const std::vector<Layout>& layouts) {
+    (void)path;
+    (void)layouts;
+    return false;
+}
+
+std::vector<Layout> LayoutManager::loadLayouts(const std::string& path) {
+    (void)path;
+    return {};
+}
+
+}  // namespace HyprZones

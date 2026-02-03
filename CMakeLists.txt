@@ -8,7 +8,7 @@ project(hyprzones
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Find Hyprland headers
+# Find Hyprland
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(HYPRLAND REQUIRED hyprland)
 
@@ -16,15 +16,20 @@ pkg_check_modules(HYPRLAND REQUIRED hyprland)
 pkg_check_modules(PANGO REQUIRED pango pangocairo)
 pkg_check_modules(CAIRO REQUIRED cairo)
 
-# Plugin library
-add_library(hyprzones SHARED
+# Source files
+set(SOURCES
     src/main.cpp
+    src/Globals.cpp
+    src/Color.cpp
     src/ZoneManager.cpp
     src/LayoutManager.cpp
     src/WindowSnapper.cpp
     src/ConfigParser.cpp
     src/Renderer.cpp
 )
+
+# Plugin library
+add_library(hyprzones SHARED ${SOURCES})
 
 target_include_directories(hyprzones PRIVATE
     ${CMAKE_SOURCE_DIR}/include
@@ -41,8 +46,12 @@ target_link_libraries(hyprzones PRIVATE
 target_compile_options(hyprzones PRIVATE
     -Wall
     -Wextra
-    -Wpedantic
     -fPIC
+)
+
+set_target_properties(hyprzones PROPERTIES
+    PREFIX ""
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
 # Installation

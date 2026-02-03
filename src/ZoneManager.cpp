@@ -1,116 +1,94 @@
-/**
- * ZoneManager - Manages zone definitions and hit testing
- */
-
-#include "hyprzones.hpp"
+#include "hyprzones/ZoneManager.hpp"
+#include <algorithm>
+#include <limits>
 
 namespace HyprZones {
 
-class ZoneManager {
-public:
-    ZoneManager() = default;
-    ~ZoneManager() = default;
-
-    /**
-     * Set the current layout's zones
-     */
-    void setZones(const std::vector<Zone>& zones) {
-        m_zones = zones;
+void ZoneManager::computeZonePixels(Layout& layout, double monitorX, double monitorY,
+                                    double monitorW, double monitorH, int gap) {
+    for (auto& zone : layout.zones) {
+        zone.pixelX = monitorX + (zone.x * monitorW) + gap;
+        zone.pixelY = monitorY + (zone.y * monitorH) + gap;
+        zone.pixelW = (zone.width * monitorW) - (2 * gap);
+        zone.pixelH = (zone.height * monitorH) - (2 * gap);
     }
+}
 
-    /**
-     * Get all zones
-     */
-    const std::vector<Zone>& getZones() const {
-        return m_zones;
-    }
+std::vector<int> ZoneManager::getZonesAtPoint(const Layout& layout, double px, double py) {
+    std::vector<int> result;
 
-    /**
-     * Recalculate pixel positions for all zones based on monitor size
-     */
-    void recalculatePixelPositions(int monitorX, int monitorY, int monitorWidth, int monitorHeight) {
-        for (auto& zone : m_zones) {
-            zone.pixelX = monitorX + static_cast<int>(monitorWidth * zone.x / 100.0);
-            zone.pixelY = monitorY + static_cast<int>(monitorHeight * zone.y / 100.0);
-            zone.pixelWidth = static_cast<int>(monitorWidth * zone.width / 100.0);
-            zone.pixelHeight = static_cast<int>(monitorHeight * zone.height / 100.0);
+    for (size_t i = 0; i < layout.zones.size(); ++i) {
+        if (layout.zones[i].containsPoint(px, py)) {
+            result.push_back(static_cast<int>(i));
         }
     }
 
-    /**
-     * Find zone at given pixel coordinates
-     * Returns zone index or -1 if no zone found
-     */
-    int findZoneAtPoint(int x, int y) const {
-        for (size_t i = 0; i < m_zones.size(); ++i) {
-            if (m_zones[i].containsPoint(x, y)) {
-                return static_cast<int>(i);
+    return result;
+}
+
+int ZoneManager::getSmallestZoneAtPoint(const Layout& layout, double px, double py) {
+    int    bestIndex = -1;
+    double bestArea  = std::numeric_limits<double>::max();
+
+    for (size_t i = 0; i < layout.zones.size(); ++i) {
+        const auto& zone = layout.zones[i];
+        if (zone.containsPoint(px, py)) {
+            double area = zone.area();
+            if (area < bestArea) {
+                bestArea  = area;
+                bestIndex = static_cast<int>(i);
             }
         }
-        return -1;
     }
 
-    /**
-     * Find zones near a point (for multi-zone snapping)
-     * Returns indices of zones whose edges are within threshold of the point
-     */
-    std::vector<int> findAdjacentZones(int x, int y, int threshold = 20) const {
-        std::vector<int> result;
+    return bestIndex;
+}
 
-        for (size_t i = 0; i < m_zones.size(); ++i) {
-            const auto& zone = m_zones[i];
+std::vector<int> ZoneManager::getZoneRange(const Layout& layout, int startZone, int endZone) {
+    std::vector<int> result;
 
-            // Check if point is near any edge
-            bool nearLeft = std::abs(x - zone.pixelX) < threshold;
-            bool nearRight = std::abs(x - (zone.pixelX + zone.pixelWidth)) < threshold;
-            bool nearTop = std::abs(y - zone.pixelY) < threshold;
-            bool nearBottom = std::abs(y - (zone.pixelY + zone.pixelHeight)) < threshold;
-
-            // Check if point is within vertical/horizontal range
-            bool inVerticalRange = y >= zone.pixelY && y <= zone.pixelY + zone.pixelHeight;
-            bool inHorizontalRange = x >= zone.pixelX && x <= zone.pixelX + zone.pixelWidth;
-
-            if ((nearLeft || nearRight) && inVerticalRange) {
-                result.push_back(static_cast<int>(i));
-            } else if ((nearTop || nearBottom) && inHorizontalRange) {
-                result.push_back(static_cast<int>(i));
-            }
-        }
-
+    if (startZone < 0 || endZone < 0) {
         return result;
     }
 
-    /**
-     * Get combined bounds of multiple zones
-     */
-    void getCombinedBounds(const std::vector<int>& zoneIndices,
-                           int& outX, int& outY, int& outWidth, int& outHeight) const {
-        if (zoneIndices.empty()) {
-            outX = outY = outWidth = outHeight = 0;
-            return;
-        }
+    int minZ = std::min(startZone, endZone);
+    int maxZ = std::max(startZone, endZone);
 
-        int minX = INT_MAX, minY = INT_MAX;
-        int maxX = INT_MIN, maxY = INT_MIN;
-
-        for (int idx : zoneIndices) {
-            if (idx < 0 || idx >= static_cast<int>(m_zones.size())) continue;
-
-            const auto& zone = m_zones[idx];
-            minX = std::min(minX, zone.pixelX);
-            minY = std::min(minY, zone.pixelY);
-            maxX = std::max(maxX, zone.pixelX + zone.pixelWidth);
-            maxY = std::max(maxY, zone.pixelY + zone.pixelHeight);
-        }
-
-        outX = minX;
-        outY = minY;
-        outWidth = maxX - minX;
-        outHeight = maxY - minY;
+    for (int i = minZ; i <= maxZ && i < static_cast<int>(layout.zones.size()); ++i) {
+        result.push_back(i);
     }
 
-private:
-    std::vector<Zone> m_zones;
-};
+    return result;
+}
 
-} // namespace HyprZones
+void ZoneManager::getCombinedZoneBox(const Layout& layout, const std::vector<int>& indices,
+                                     double& outX, double& outY, double& outW, double& outH) {
+    if (indices.empty()) {
+        outX = outY = outW = outH = 0;
+        return;
+    }
+
+    double minX = std::numeric_limits<double>::max();
+    double minY = std::numeric_limits<double>::max();
+    double maxX = std::numeric_limits<double>::lowest();
+    double maxY = std::numeric_limits<double>::lowest();
+
+    for (int idx : indices) {
+        if (idx < 0 || idx >= static_cast<int>(layout.zones.size())) {
+            continue;
+        }
+
+        const auto& zone = layout.zones[idx];
+        minX = std::min(minX, zone.pixelX);
+        minY = std::min(minY, zone.pixelY);
+        maxX = std::max(maxX, zone.pixelX + zone.pixelW);
+        maxY = std::max(maxY, zone.pixelY + zone.pixelH);
+    }
+
+    outX = minX;
+    outY = minY;
+    outW = maxX - minX;
+    outH = maxY - minY;
+}
+
+}  // namespace HyprZones

@@ -1,159 +1,385 @@
-/**
- * HyprZones - Zone-based window tiling for Hyprland
- *
- * Inspired by Microsoft PowerToys FancyZones
- *
- * This plugin provides declarative zone-based window management:
- * - Define zones in a config file
- * - Windows snap to zones via drag or keybind
- * - Layouts can be saved, loaded, and switched via hotkeys
- */
+#define WLR_USE_UNSTABLE
 
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/Compositor.hpp>
-#include <hyprland/src/desktop/Window.hpp>
-#include <hyprland/src/managers/KeybindManager.hpp>
+#include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/devices/IPointer.hpp>
+#include <hyprland/src/helpers/Monitor.hpp>
+#include <hyprland/src/managers/KeybindManager.hpp>
 
-#include "hyprzones.hpp"
+#include "hyprzones/Globals.hpp"
+#include "hyprzones/Config.hpp"
+#include "hyprzones/DragState.hpp"
+#include "hyprzones/ZoneManager.hpp"
+#include "hyprzones/LayoutManager.hpp"
+#include "hyprzones/WindowSnapper.hpp"
+#include "hyprzones/Renderer.hpp"
 
-inline HANDLE PHANDLE = nullptr;
+using namespace HyprZones;
 
-// Global managers
-static std::unique_ptr<HyprZones::ZoneManager> g_zoneManager;
-static std::unique_ptr<HyprZones::LayoutManager> g_layoutManager;
-static std::unique_ptr<HyprZones::WindowSnapper> g_windowSnapper;
-static std::unique_ptr<HyprZones::ConfigParser> g_configParser;
-static std::unique_ptr<HyprZones::Renderer> g_renderer;
-static HyprZones::Config g_config;
+// Callback handles
+static SP<HOOK_CALLBACK_FN> g_pMouseMoveCallback;
+static SP<HOOK_CALLBACK_FN> g_pMouseButtonCallback;
+static SP<HOOK_CALLBACK_FN> g_pRenderCallback;
+static SP<HOOK_CALLBACK_FN> g_pWindowOpenCallback;
 
-// Hook handles
-static CFunctionHook* g_renderHook = nullptr;
-static CFunctionHook* g_windowDragHook = nullptr;
+// Helper: Get focused window
+static PHLWINDOW getFocusedWindow() {
+    auto monitor = g_pCompositor->getMonitorFromCursor();
+    if (!monitor || !monitor->m_activeWorkspace)
+        return nullptr;
+    return monitor->m_activeWorkspace->getLastFocusedWindow();
+}
 
-/**
- * IPC command handler for hyprzones commands
- *
- * Commands:
- *   hyprzones layouts          - List all layouts
- *   hyprzones apply <name>     - Apply layout by name
- *   hyprzones moveto <zone>    - Move active window to zone
- *   hyprzones save <name>      - Save current positions as layout
- *   hyprzones reload           - Reload configuration
- */
-static std::string handleHyprzonesCommand(std::string command) {
-    // TODO: Implement IPC commands
+// Helper: Get current monitor name
+static std::string getCurrentMonitorName() {
+    auto monitor = g_pCompositor->getMonitorFromCursor();
+    return monitor ? monitor->m_name : "";
+}
 
-    if (command == "layouts") {
-        std::string result = "Available layouts:\n";
-        for (const auto& layout : g_config.layouts) {
-            result += "  - " + layout.name;
-            if (!layout.hotkey.empty()) {
-                result += " (" + layout.hotkey + ")";
+// Helper: Get current workspace ID
+static int getCurrentWorkspaceID() {
+    auto monitor = g_pCompositor->getMonitorFromCursor();
+    if (!monitor || !monitor->m_activeWorkspace)
+        return -1;
+    return monitor->m_activeWorkspace->m_id;
+}
+
+// Callback: Mouse move
+static void onMouseMove(void*, SCallbackInfo&, std::any data) {
+    if (!g_dragState.isDragging)
+        return;
+
+    auto coords = std::any_cast<const Vector2D>(data);
+    g_dragState.currentX = coords.x;
+    g_dragState.currentY = coords.y;
+
+    auto* layout = g_layoutManager->getLayoutForMonitor(
+        g_config, getCurrentMonitorName(), getCurrentWorkspaceID()
+    );
+
+    if (!layout || !g_dragState.isZoneSnapping)
+        return;
+
+    // Compute zone pixels if not done
+    auto monitor = g_pCompositor->getMonitorFromCursor();
+    if (monitor) {
+        g_zoneManager->computeZonePixels(*layout,
+            monitor->m_position.x, monitor->m_position.y,
+            monitor->m_size.x, monitor->m_size.y,
+            g_config.zoneGap);
+    }
+
+    int zone = g_zoneManager->getSmallestZoneAtPoint(*layout,
+        g_dragState.currentX, g_dragState.currentY);
+    g_dragState.currentZone = zone;
+
+    if (zone >= 0) {
+        if (g_dragState.ctrlHeld && g_dragState.startZone >= 0) {
+            // Multi-zone selection
+            g_dragState.selectedZones = g_zoneManager->getZoneRange(
+                *layout, g_dragState.startZone, zone);
+        } else {
+            g_dragState.selectedZones = {zone};
+        }
+    } else {
+        g_dragState.selectedZones.clear();
+    }
+}
+
+// Callback: Mouse button
+static void onMouseButton(void*, SCallbackInfo& info, std::any data) {
+    auto e = std::any_cast<IPointer::SButtonEvent>(data);
+
+    // Only handle left mouse button
+    if (e.button != BTN_LEFT)
+        return;
+
+    if (e.state == WL_POINTER_BUTTON_STATE_PRESSED) {
+        auto window = getFocusedWindow();
+        if (!window)
+            return;
+
+        // Check if floating (zone snapping only for floating windows)
+        if (!window->m_isFloating)
+            return;
+
+        // Start drag tracking
+        auto coords = g_pInputManager->getMouseCoordsInternal();
+        g_dragState.isDragging = true;
+        g_dragState.draggedWindow = window.get();
+        g_dragState.dragStartX = coords.x;
+        g_dragState.dragStartY = coords.y;
+        g_dragState.currentX = coords.x;
+        g_dragState.currentY = coords.y;
+
+        // Check modifier key for zone snapping
+        // TODO: Check actual modifier state
+        if (g_config.showOnDrag && !g_config.requireModifier) {
+            g_dragState.isZoneSnapping = true;
+            g_renderer->show();
+
+            auto* layout = g_layoutManager->getLayoutForMonitor(
+                g_config, getCurrentMonitorName(), getCurrentWorkspaceID());
+            if (layout) {
+                g_dragState.startZone = g_zoneManager->getSmallestZoneAtPoint(
+                    *layout, coords.x, coords.y);
             }
-            result += "\n";
         }
-        return result;
-    }
+    } else {
+        // Button released
+        if (g_dragState.isDragging && g_dragState.isZoneSnapping) {
+            if (!g_dragState.selectedZones.empty()) {
+                auto* layout = g_layoutManager->getLayoutForMonitor(
+                    g_config, getCurrentMonitorName(), getCurrentWorkspaceID());
 
-    if (command.starts_with("apply ")) {
-        std::string layoutName = command.substr(6);
-        // TODO: Apply layout
-        return "Applied layout: " + layoutName;
-    }
+                if (layout && g_dragState.draggedWindow) {
+                    // Get combined zone box
+                    double x, y, w, h;
+                    g_zoneManager->getCombinedZoneBox(*layout,
+                        g_dragState.selectedZones, x, y, w, h);
 
-    if (command.starts_with("moveto ")) {
-        std::string zoneStr = command.substr(7);
-        int zoneIndex = std::stoi(zoneStr);
-        // TODO: Move window to zone
-        return "Moved to zone: " + std::to_string(zoneIndex);
-    }
+                    if (w > 0 && h > 0) {
+                        auto window = reinterpret_cast<Desktop::View::CWindow*>(
+                            g_dragState.draggedWindow);
 
-    if (command == "reload") {
-        // TODO: Reload config
-        return "Configuration reloaded";
-    }
+                        // Remember original size
+                        auto origBox = window->logicalBox();
+                        if (origBox) {
+                            g_windowSnapper->rememberWindow(
+                                g_dragState.draggedWindow,
+                                layout->name,
+                                g_dragState.selectedZones,
+                                origBox->x, origBox->y,
+                                origBox->w, origBox->h);
+                        }
 
-    return "Unknown command: " + command;
+                        // Move and resize window to zone
+                        // Use dispatcher for proper animation
+                        std::string moveArg = "exact " +
+                            std::to_string(static_cast<int>(x)) + " " +
+                            std::to_string(static_cast<int>(y));
+                        std::string sizeArg = "exact " +
+                            std::to_string(static_cast<int>(w)) + " " +
+                            std::to_string(static_cast<int>(h));
+
+                        g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
+                        g_pKeybindManager->m_dispatchers["resizewindowpixel"](sizeArg);
+                    }
+                }
+            }
+        }
+
+        g_dragState.reset();
+        g_renderer->hide();
+    }
 }
 
-/**
- * Dispatcher for zone movement
- * Usage: hyprzones:moveto, <zone_index>
- */
-static void dispatchMoveToZone(std::string args) {
-    // TODO: Implement
+// Callback: Render (for zone overlay)
+static void onRender(void*, SCallbackInfo&, std::any data) {
+    if (!g_renderer->isVisible())
+        return;
+
+    // TODO: Implement actual OpenGL rendering of zone overlay
+    // This requires hooking into Hyprland's render pass
 }
 
-/**
- * Dispatcher for layout switching
- * Usage: hyprzones:layout, <layout_name>
- */
-static void dispatchSwitchLayout(std::string args) {
-    // TODO: Implement
+// IPC: List layouts
+static std::string cmdLayouts(eHyprCtlOutputFormat format, std::string) {
+    std::string result;
+    if (format == eHyprCtlOutputFormat::FORMAT_JSON) {
+        result = "[";
+        for (size_t i = 0; i < g_config.layouts.size(); ++i) {
+            if (i > 0) result += ",";
+            result += "{\"name\":\"" + g_config.layouts[i].name + "\"}";
+        }
+        result += "]";
+    } else {
+        result = "layouts:\n";
+        for (const auto& layout : g_config.layouts) {
+            result += "  - " + layout.name + "\n";
+        }
+    }
+    return result;
 }
 
-/**
- * Dispatcher for showing zone overlay
- * Usage: hyprzones:showzones
- */
-static void dispatchShowZones(std::string args) {
-    // TODO: Implement
+// IPC: Move to zone
+static std::string cmdMoveto(eHyprCtlOutputFormat, std::string args) {
+    if (args.empty())
+        return "error: zone index required";
+
+    int zoneIndex;
+    try {
+        zoneIndex = std::stoi(args);
+    } catch (...) {
+        return "error: invalid zone index";
+    }
+
+    auto window = getFocusedWindow();
+    if (!window)
+        return "error: no focused window";
+
+    auto* layout = g_layoutManager->getLayoutForMonitor(
+        g_config, getCurrentMonitorName(), getCurrentWorkspaceID());
+
+    if (!layout)
+        return "error: no layout";
+
+    if (zoneIndex < 0 || zoneIndex >= static_cast<int>(layout->zones.size()))
+        return "error: zone index out of range";
+
+    // Compute zone pixels
+    auto monitor = g_pCompositor->getMonitorFromCursor();
+    if (monitor) {
+        g_zoneManager->computeZonePixels(*layout,
+            monitor->m_position.x, monitor->m_position.y,
+            monitor->m_size.x, monitor->m_size.y,
+            g_config.zoneGap);
+    }
+
+    const auto& zone = layout->zones[zoneIndex];
+
+    // Move and resize
+    std::string moveArg = "exact " +
+        std::to_string(static_cast<int>(zone.pixelX)) + " " +
+        std::to_string(static_cast<int>(zone.pixelY));
+    std::string sizeArg = "exact " +
+        std::to_string(static_cast<int>(zone.pixelW)) + " " +
+        std::to_string(static_cast<int>(zone.pixelH));
+
+    g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
+    g_pKeybindManager->m_dispatchers["resizewindowpixel"](sizeArg);
+
+    return "ok";
 }
 
-/**
- * Plugin initialization
- */
+// IPC: Reload config
+static std::string cmdReload(eHyprCtlOutputFormat, std::string) {
+    reloadConfig();
+    return "reloaded";
+}
+
+// Dispatcher: Move to zone
+static SDispatchResult dispatchMoveto(std::string args) {
+    SDispatchResult result;
+    std::string out = cmdMoveto(eHyprCtlOutputFormat::FORMAT_NORMAL, args);
+    result.success = (out == "ok");
+    if (!result.success)
+        result.error = out;
+    return result;
+}
+
+// Dispatcher: Switch layout
+static SDispatchResult dispatchLayout(std::string args) {
+    SDispatchResult result;
+    g_layoutManager->switchLayout(g_config, args);
+    result.success = true;
+    return result;
+}
+
+// Dispatcher: Cycle layout
+static SDispatchResult dispatchCycleLayout(std::string args) {
+    SDispatchResult result;
+    int direction = 1;
+    if (!args.empty()) {
+        try {
+            direction = std::stoi(args);
+        } catch (...) {}
+    }
+    g_layoutManager->cycleLayout(g_config, direction);
+    result.success = true;
+    return result;
+}
+
+// Dispatcher: Show zones
+static SDispatchResult dispatchShowZones(std::string) {
+    SDispatchResult result;
+    g_renderer->show();
+    result.success = true;
+    return result;
+}
+
+// Dispatcher: Hide zones
+static SDispatchResult dispatchHideZones(std::string) {
+    SDispatchResult result;
+    g_renderer->hide();
+    result.success = true;
+    return result;
+}
+
+// Plugin initialization
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
-    PHANDLE = handle;
+    g_handle = handle;
 
-    // Log startup
     HyprlandAPI::addNotification(
-        PHANDLE,
-        "[HyprZones] Plugin loaded",
-        CColor(0.2f, 0.8f, 0.2f, 1.0f),
+        g_handle,
+        "[HyprZones] Initializing...",
+        CHyprColor(0.2f, 0.8f, 0.2f, 1.0f),
         3000
     );
 
-    // Register IPC command
-    HyprlandAPI::registerHyprCtlCommand(
-        PHANDLE,
-        SHyprCtlCommand{
-            .name = "hyprzones",
-            .handler = handleHyprzonesCommand,
-            .exact = false
-        }
+    // Initialize globals
+    initGlobals();
+    reloadConfig();
+
+    // Register callbacks
+    g_pMouseMoveCallback = HyprlandAPI::registerCallbackDynamic(
+        g_handle, "mouseMove", onMouseMove);
+    g_pMouseButtonCallback = HyprlandAPI::registerCallbackDynamic(
+        g_handle, "mouseButton", onMouseButton);
+    g_pRenderCallback = HyprlandAPI::registerCallbackDynamic(
+        g_handle, "render", onRender);
+
+    // Register config values
+    HyprlandAPI::addConfigValue(g_handle, "plugin:hyprzones:enabled",
+        Hyprlang::INT{1});
+    HyprlandAPI::addConfigValue(g_handle, "plugin:hyprzones:snap_modifier",
+        Hyprlang::STRING{"SHIFT"});
+    HyprlandAPI::addConfigValue(g_handle, "plugin:hyprzones:show_on_drag",
+        Hyprlang::INT{1});
+    HyprlandAPI::addConfigValue(g_handle, "plugin:hyprzones:zone_gap",
+        Hyprlang::INT{10});
+
+    // Register hyprctl commands
+    HyprlandAPI::registerHyprCtlCommand(g_handle,
+        SHyprCtlCommand{"hyprzones:layouts", true, cmdLayouts});
+    HyprlandAPI::registerHyprCtlCommand(g_handle,
+        SHyprCtlCommand{"hyprzones:moveto", true, cmdMoveto});
+    HyprlandAPI::registerHyprCtlCommand(g_handle,
+        SHyprCtlCommand{"hyprzones:reload", true, cmdReload});
+
+    // Register dispatchers (using V2 API)
+    HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:moveto", dispatchMoveto);
+    HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:layout", dispatchLayout);
+    HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:cycle", dispatchCycleLayout);
+    HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:show", dispatchShowZones);
+    HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:hide", dispatchHideZones);
+
+    HyprlandAPI::addNotification(
+        g_handle,
+        "[HyprZones] Loaded v0.1.0",
+        CHyprColor(0.2f, 0.8f, 0.2f, 1.0f),
+        3000
     );
 
-    // Register dispatchers
-    HyprlandAPI::addDispatcher(PHANDLE, "hyprzones:moveto", dispatchMoveToZone);
-    HyprlandAPI::addDispatcher(PHANDLE, "hyprzones:layout", dispatchSwitchLayout);
-    HyprlandAPI::addDispatcher(PHANDLE, "hyprzones:showzones", dispatchShowZones);
-
-    // TODO: Initialize managers
-    // TODO: Load configuration
-    // TODO: Set up hooks for window drag detection
-    // TODO: Set up render hooks for zone visualization
-
-    return {"HyprZones", "Zone-based window tiling", "Your Name", "0.1.0"};
+    return {"hyprzones", "Zone-based window tiling for Hyprland", "HyprZones", "0.1.0"};
 }
 
-/**
- * Plugin cleanup
- */
+// Plugin exit
 APICALL EXPORT void PLUGIN_EXIT() {
-    // Cleanup
     HyprlandAPI::addNotification(
-        PHANDLE,
-        "[HyprZones] Plugin unloaded",
-        CColor(0.8f, 0.2f, 0.2f, 1.0f),
-        3000
+        g_handle,
+        "[HyprZones] Unloading...",
+        CHyprColor(0.8f, 0.8f, 0.2f, 1.0f),
+        2000
     );
+    cleanupGlobals();
 }
 
-/**
- * Configuration reload handler
- */
-APICALL EXPORT void PLUGIN_RELOAD() {
-    // TODO: Reload configuration
+// Plugin API version
+APICALL EXPORT std::string PLUGIN_API_VERSION() {
+    return HYPRLAND_API_VERSION;
 }

@@ -152,29 +152,125 @@ hyprctl hyprzones editor
 hyprctl hyprzones save my-layout
 ```
 
+## Requirements
+
+- Hyprland (with development headers)
+- CMake >= 3.19
+- C++23 compiler (GCC 13+ or Clang 17+)
+- pkg-config
+- pango, cairo
+
+### Arch Linux
+
+```bash
+sudo pacman -S hyprland cmake gcc pango cairo
+```
+
 ## Building
 
 ```bash
+# Configure
 cmake -DCMAKE_BUILD_TYPE=Release -B build
+
+# Build
 cmake --build build
+
+# The plugin will be at: build/hyprzones.so
 ```
 
 ## Installation
 
-```bash
-# Using hyprpm
-hyprpm add https://github.com/USER/hyprzones
-hyprpm enable hyprzones
+### Using hyprpm (Recommended)
 
-# Manual
-cp build/libhyprzones.so ~/.config/hypr/plugins/
-# Add to hyprland.conf:
-plugin = ~/.config/hypr/plugins/libhyprzones.so
+```bash
+hyprpm add https://github.com/azzuriel/hyprzones
+hyprpm enable hyprzones
+```
+
+### Manual Installation
+
+```bash
+# Build first (see above)
+
+# Copy plugin
+mkdir -p ~/.local/share/hyprload/plugins
+cp build/hyprzones.so ~/.local/share/hyprload/plugins/
+
+# Or system-wide
+sudo cp build/hyprzones.so /usr/lib/hyprland/plugins/
+```
+
+Add to `~/.config/hypr/hyprland.conf`:
+
+```ini
+plugin = ~/.local/share/hyprload/plugins/hyprzones.so
+```
+
+Or with hyprpm:
+
+```ini
+exec-once = hyprpm reload -n
+```
+
+## Configuration
+
+Create `~/.config/hypr/hyprzones.toml` (see examples/hyprzones.toml)
+
+## Usage
+
+### Dispatchers
+
+```ini
+# Move focused window to zone 0
+bind = $mainMod, 1, hyprzones:moveto, 0
+
+# Switch layout
+bind = $mainMod CTRL, 1, hyprzones:layout, development
+
+# Show/hide zone overlay
+bind = $mainMod, Z, hyprzones:show,
+bind = $mainMod SHIFT, Z, hyprzones:hide,
+```
+
+### IPC Commands
+
+```bash
+# List layouts
+hyprctl hyprzones:layouts
+
+# Move window to zone
+hyprctl hyprzones:moveto 0
+
+# Reload config
+hyprctl hyprzones:reload
+```
+
+## Project Structure
+
+```
+hyprzones/
+├── include/hyprzones/
+│   ├── Zone.hpp          # Zone data structure
+│   ├── Layout.hpp        # Layout (collection of zones)
+│   ├── Config.hpp        # Configuration
+│   ├── DragState.hpp     # Drag tracking state
+│   ├── ZoneManager.hpp   # Zone hit-testing
+│   ├── LayoutManager.hpp # Layout switching
+│   ├── WindowSnapper.hpp # Window snapping
+│   ├── Renderer.hpp      # Zone overlay rendering
+│   └── Globals.hpp       # Global instances
+├── src/
+│   ├── main.cpp          # Plugin entry point
+│   ├── Globals.cpp       # Global definitions
+│   └── *.cpp             # Implementations
+├── examples/
+│   └── hyprzones.toml    # Example configuration
+└── CMakeLists.txt
 ```
 
 ## Status
 
-**Early Development** - Architecture and concept phase.
+**Early Development** - Core architecture implemented, rendering WIP.
 
 ## License
 
