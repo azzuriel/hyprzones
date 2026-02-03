@@ -13,6 +13,13 @@
 - **NO orphaned code** - all functions/methods must be used; if you implement something, use it
 - **NO dead code** - remove unused code, don't leave it hanging
 
+## FORBIDDEN COMMANDS
+
+- **NEVER copy files to `/var/cache/hyprpm/`** - this is a system cache managed by hyprpm
+- **NEVER use `hyprctl plugin load`** - the user manages plugin loading themselves
+- **NEVER use `hyprpm update`** - this pulls from GitHub, not local changes
+- **NEVER write to system directories** - stay within the project directory
+
 ## FORBIDDEN PHRASES IN CODE/COMMENTS
 
 These phrases indicate incomplete work and are NOT allowed:

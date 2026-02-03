@@ -5,11 +5,13 @@
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/devices/IPointer.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
+#include <hyprland/src/SharedDefs.hpp>
 
 #include "hyprzones/Globals.hpp"
 #include "hyprzones/Config.hpp"
@@ -202,26 +204,24 @@ static void onRender(void*, SCallbackInfo&, std::any data) {
     if (!g_renderer || !g_renderer->isVisible())
         return;
 
-    // Get the monitor being rendered - try different cast types
-    CMonitor* monitor = nullptr;
+    // The render hook passes eRenderStage, not a monitor pointer
+    eRenderStage stage;
     try {
-        // Try pointer cast first
-        if (data.type() == typeid(CMonitor*)) {
-            monitor = std::any_cast<CMonitor*>(data);
-        }
+        stage = std::any_cast<eRenderStage>(data);
     } catch (...) {
         return;
     }
 
-    if (!monitor) {
-        // Fallback: get monitor from cursor
-        auto pMon = g_pCompositor->getMonitorFromCursor();
-        if (pMon)
-            monitor = pMon.get();
-    }
-
-    if (!monitor)
+    // Only render overlays after windows are drawn (on top of everything)
+    if (stage != RENDER_POST_WINDOWS)
         return;
+
+    // Get current monitor from OpenGL render context
+    auto pMonitor = g_pHyprOpenGL->m_renderData.pMonitor.lock();
+    if (!pMonitor)
+        return;
+
+    CMonitor* monitor = pMonitor.get();
 
     // Get layout for this monitor
     auto* layout = g_layoutManager->getLayoutForMonitor(
