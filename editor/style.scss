@@ -273,10 +273,15 @@ $backdrop: rgba(0, 0, 0, 0.85);
     }
 }
 
-.active-layout-check {
+.indicator-active {
     color: #00ff00;
     font-weight: bold;
-    font-size: 16px;
+    font-size: 18px;
+}
+
+.indicator-inactive {
+    color: #555555;
+    font-size: 18px;
 }
 
 .section-header {

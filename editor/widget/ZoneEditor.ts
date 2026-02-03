@@ -732,13 +732,13 @@ function refreshLayoutList() {
         const row = new Gtk.ListBoxRow()
         const rowBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
 
-        // Green dot = layout is used in at least one mapping
-        const indicator = new Gtk.Label({ label: mappedLayoutNames.has(name) ? "●" : "○" })
+        // Green/gray dot = layout is/isn't used in mappings
+        const isMapped = mappedLayoutNames.has(name)
+        const indicator = new Gtk.Label({ label: isMapped ? "●" : "○" })
         indicator.set_margin_start(8)
         indicator.set_margin_end(4)
-        if (mappedLayoutNames.has(name)) {
-            indicator.override_color(Gtk.StateFlags.NORMAL, new Gdk.RGBA({ red: 0, green: 1, blue: 0, alpha: 1 }))
-        }
+        // Apply CSS class for color
+        indicator.get_style_context().add_class(isMapped ? "indicator-active" : "indicator-inactive")
         rowBox.pack_start(indicator, false, false, 0)
 
         const rowLabel = new Gtk.Label({ label: name })
