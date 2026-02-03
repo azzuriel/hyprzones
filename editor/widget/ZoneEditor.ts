@@ -554,7 +554,7 @@ function createLayoutPanel(): Gtk.Box {
             if (success) {
                 await reloadConfig()
                 hasChanges = false
-                refreshLayoutList()
+                await refreshLayoutList()
             }
         }
     })
@@ -574,7 +574,7 @@ function createLayoutPanel(): Gtk.Box {
                     currentLayout.name = newName
                 }
                 await reloadConfig()
-                refreshLayoutList()
+                await refreshLayoutList()
                 refreshMappingsList()
                 selectedOldName = newName
             }
@@ -591,7 +591,7 @@ function createLayoutPanel(): Gtk.Box {
         if (name && layoutNames.includes(name)) {
             deleteLayout(name)
             await reloadConfig()
-            refreshLayoutList()
+            await refreshLayoutList()
             layoutNameEntry.set_text("")
             selectedOldName = null
         }
@@ -713,11 +713,16 @@ function createLayoutPanel(): Gtk.Box {
     return panel
 }
 
-function refreshLayoutList() {
+async function refreshLayoutList() {
     if (!layoutListBox) return
 
     // Clear existing rows
     layoutListBox.foreach((child: Gtk.Widget) => layoutListBox!.remove(child))
+
+    // Ensure we have monitor info
+    if (allMonitors.length === 0) {
+        allMonitors = await fetchAllMonitors()
+    }
 
     // Get active layout for current monitor/workspace
     const focusedMonitor = allMonitors.find(m => m.focused)
@@ -814,7 +819,7 @@ function refreshMappingsList() {
     mappingsListBox.show_all()
 }
 
-function showLayoutPanel() {
+async function showLayoutPanel() {
     // Remove old panel if exists
     if (layoutPanel && mainOverlay) {
         mainOverlay.remove(layoutPanel)
@@ -826,7 +831,7 @@ function showLayoutPanel() {
     layoutPanel.set_halign(Gtk.Align.CENTER)
     layoutPanel.set_valign(Gtk.Align.CENTER)
     layoutNameEntry?.set_text(currentLayout.name)
-    refreshLayoutList()
+    await refreshLayoutList()
     refreshMappingsList()
 
     // Add as overlay (on top of everything)
