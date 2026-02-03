@@ -554,7 +554,7 @@ function createLayoutPanel(): Gtk.Box {
             if (success) {
                 await reloadConfig()
                 hasChanges = false
-                await refreshLayoutList()
+                refreshLayoutList()
             }
         }
     })
@@ -574,7 +574,7 @@ function createLayoutPanel(): Gtk.Box {
                     currentLayout.name = newName
                 }
                 await reloadConfig()
-                await refreshLayoutList()
+                refreshLayoutList()
                 refreshMappingsList()
                 selectedOldName = newName
             }
@@ -591,7 +591,7 @@ function createLayoutPanel(): Gtk.Box {
         if (name && layoutNames.includes(name)) {
             deleteLayout(name)
             await reloadConfig()
-            await refreshLayoutList()
+            refreshLayoutList()
             layoutNameEntry.set_text("")
             selectedOldName = null
         }
@@ -713,22 +713,15 @@ function createLayoutPanel(): Gtk.Box {
     return panel
 }
 
-async function refreshLayoutList() {
+function refreshLayoutList() {
     if (!layoutListBox) return
 
     // Clear existing rows
     layoutListBox.foreach((child: Gtk.Widget) => layoutListBox!.remove(child))
 
-    // Ensure we have monitor info
-    if (allMonitors.length === 0) {
-        allMonitors = await fetchAllMonitors()
-    }
-
-    // Get active layout for current monitor/workspace
-    const focusedMonitor = allMonitors.find(m => m.focused)
-    const activeLayoutName = focusedMonitor
-        ? getActiveLayoutName(focusedMonitor.name, focusedMonitor.activeWorkspace?.id || 1)
-        : null
+    // Get all mapped layout names
+    const mappings = loadAllMappings()
+    const mappedLayoutNames = new Set(mappings.map(m => m.layout))
 
     // Add layouts
     const layoutNames = getLayoutNames()
@@ -736,8 +729,8 @@ async function refreshLayoutList() {
         const row = new Gtk.ListBoxRow()
         const rowBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
 
-        // Green checkmark for active layout
-        if (name === activeLayoutName) {
+        // Green checkmark for layouts that are mapped (in use)
+        if (mappedLayoutNames.has(name)) {
             const checkLabel = new Gtk.Label({ label: "✓" })
             checkLabel.get_style_context().add_class("active-layout-check")
             checkLabel.set_margin_start(8)
@@ -831,7 +824,7 @@ async function showLayoutPanel() {
     layoutPanel.set_halign(Gtk.Align.CENTER)
     layoutPanel.set_valign(Gtk.Align.CENTER)
     layoutNameEntry?.set_text(currentLayout.name)
-    await refreshLayoutList()
+    refreshLayoutList()
     refreshMappingsList()
 
     // Add as overlay (on top of everything)
