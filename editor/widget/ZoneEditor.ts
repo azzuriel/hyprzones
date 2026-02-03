@@ -23,14 +23,30 @@ const DEFAULT_LAYOUT: Layout = {
     ]
 }
 
+// Monitor info from Hyprland
+interface HyprMonitor {
+    id: number
+    name: string
+    width: number
+    height: number
+    x: number
+    y: number
+    transform: number  // 0=normal, 1=90°, 2=180°, 3=270°, 4-7=flipped variants
+    scale: number
+    reserved: [number, number, number, number]  // left, top, right, bottom
+    focused: boolean
+}
+
 // State
 let editorWindow: Gtk.Window | null = null
 let currentLayout: Layout
 let originalLayout: Layout
 let hasChanges = false
+let allMonitors: HyprMonitor[] = []
+let selectedMonitorName: string = ""
 let monitor: MonitorGeometry = { x: 0, y: 0, width: 1920, height: 1080 }
-let fullScreenWidth = 3840
-let fullScreenHeight = 2160
+let fullScreenWidth = 1920
+let fullScreenHeight = 1080
 
 // Drag state - global for window-level event handling
 let activeDragSegment: SplitterSegment | null = null
@@ -669,104 +685,134 @@ function handleReset() {
     updateZoneDisplay()
 }
 
-// Screen margins (waybar + gaps) - will be detected from actual windows
+// Screen margins (waybar + gaps) - fixed offsets for ALL monitors
 let MARGIN_TOP = 97
 let MARGIN_BOTTOM = 22
 let MARGIN_LEFT = 22
 let MARGIN_RIGHT = 22
 let HEADER_BAR_HEIGHT = 0  // Will be detected from hyprbars plugin
 
-// Detect margins from actual window positions
-async function detectMargins(): Promise<void> {
+// Detect hyprbars header bar height
+async function detectHeaderBarHeight(): Promise<void> {
     try {
-        // Detect hyprbars header bar height
-        try {
-            const barResult = await execAsync(['hyprctl', 'getoption', 'plugin:hyprbars:bar_height', '-j'])
-            const barData = JSON.parse(barResult)
-            if (barData.int) {
-                HEADER_BAR_HEIGHT = barData.int
-            }
-        } catch {
-            HEADER_BAR_HEIGHT = 0
+        const barResult = await execAsync(['hyprctl', 'getoption', 'plugin:hyprbars:bar_height', '-j'])
+        const barData = JSON.parse(barResult)
+        if (barData.int) {
+            HEADER_BAR_HEIGHT = barData.int
         }
-
-        const result = await execAsync(['hyprctl', 'clients', '-j'])
-        const clients = JSON.parse(result)
-
-        // Find windows that are likely tiled (not floating, reasonable size)
-        const tiledWindows = clients.filter((c: any) =>
-            !c.floating && c.size[0] > 100 && c.size[1] > 100
-        )
-
-        if (tiledWindows.length > 0) {
-            let minX = Infinity, maxX = 0
-            let maxY = 0
-            const yStarts: number[] = []
-
-            for (const w of tiledWindows) {
-                minX = Math.min(minX, w.at[0])
-                maxX = Math.max(maxX, w.at[0] + w.size[0])
-                yStarts.push(w.at[1])
-                maxY = Math.max(maxY, w.at[1] + w.size[1])
-            }
-
-            // For top: use mode (most common) to account for windows with/without headers
-            const mode = (arr: number[]) => {
-                const counts = new Map<number, number>()
-                for (const v of arr) counts.set(v, (counts.get(v) || 0) + 1)
-                let maxCount = 0, modeVal = Math.max(...arr)
-                for (const [val, count] of counts) {
-                    if (count > maxCount) { maxCount = count; modeVal = val }
-                }
-                return modeVal
-            }
-
-            MARGIN_LEFT = minX
-            MARGIN_RIGHT = fullScreenWidth - maxX
-            MARGIN_TOP = mode(yStarts)
-            MARGIN_BOTTOM = fullScreenHeight - maxY
-        }
-    } catch (e) {
-        console.error('Failed to detect margins:', e)
+    } catch {
+        HEADER_BAR_HEIGHT = 0
     }
 }
 
-// Get monitor geometry with margins applied
-async function getMonitorGeometry(): Promise<MonitorGeometry> {
+// Fetch all monitors from Hyprland
+async function fetchAllMonitors(): Promise<HyprMonitor[]> {
     try {
         const result = await execAsync(['hyprctl', 'monitors', '-j'])
-        const monitors = JSON.parse(result)
-        const focused = monitors.find((m: any) => m.focused) || monitors[0]
-        if (focused) {
-            fullScreenWidth = focused.width
-            fullScreenHeight = focused.height
-
-            // Detect actual margins from window positions
-            await detectMargins()
-
-            return {
-                x: MARGIN_LEFT,
-                y: MARGIN_TOP,
-                width: focused.width - MARGIN_LEFT - MARGIN_RIGHT,
-                height: focused.height - MARGIN_TOP - MARGIN_BOTTOM + HEADER_BAR_HEIGHT
-            }
-        }
+        return JSON.parse(result) as HyprMonitor[]
     } catch (e) {
-        console.error('Failed to get monitor:', e)
+        console.error('Failed to get monitors:', e)
+        return []
     }
+}
+
+// Get effective dimensions considering transform (portrait mode)
+function getEffectiveDimensions(mon: HyprMonitor): { width: number, height: number } {
+    // Transform 1, 3, 5, 7 = 90° or 270° rotation (portrait)
+    const isPortrait = mon.transform === 1 || mon.transform === 3 ||
+                       mon.transform === 5 || mon.transform === 7
+    return isPortrait
+        ? { width: mon.height, height: mon.width }
+        : { width: mon.width, height: mon.height }
+}
+
+// Select a monitor and calculate its geometry using fixed margins
+function selectMonitor(mon: HyprMonitor): MonitorGeometry {
+    selectedMonitorName = mon.name
+
+    const dims = getEffectiveDimensions(mon)
+    fullScreenWidth = dims.width
+    fullScreenHeight = dims.height
+
+    // Use fixed margins (waybar + gaps) - same for all monitors
     return {
         x: MARGIN_LEFT,
         y: MARGIN_TOP,
-        width: 1920 - MARGIN_LEFT - MARGIN_RIGHT,
-        height: 1080 - MARGIN_TOP - MARGIN_BOTTOM + HEADER_BAR_HEIGHT
+        width: dims.width - MARGIN_LEFT - MARGIN_RIGHT,
+        height: dims.height - MARGIN_TOP - MARGIN_BOTTOM + HEADER_BAR_HEIGHT
     }
 }
 
-// Create toolbar with reset/cancel/config buttons
+// Get monitor geometry - use layout's monitor or focused one
+async function getMonitorGeometry(preferMonitor?: string): Promise<MonitorGeometry> {
+    // Detect hyprbars header height
+    await detectHeaderBarHeight()
+
+    allMonitors = await fetchAllMonitors()
+
+    if (allMonitors.length === 0) {
+        // Fallback if no monitors found - use margins
+        return {
+            x: MARGIN_LEFT,
+            y: MARGIN_TOP,
+            width: 1920 - MARGIN_LEFT - MARGIN_RIGHT,
+            height: 1080 - MARGIN_TOP - MARGIN_BOTTOM + HEADER_BAR_HEIGHT
+        }
+    }
+
+    // Priority: 1. preferMonitor, 2. layout.monitor, 3. focused, 4. first
+    let target: HyprMonitor | undefined
+
+    if (preferMonitor) {
+        target = allMonitors.find(m => m.name === preferMonitor)
+    }
+    if (!target && currentLayout?.monitor) {
+        target = allMonitors.find(m => m.name === currentLayout.monitor)
+    }
+    if (!target) {
+        target = allMonitors.find(m => m.focused)
+    }
+    if (!target) {
+        target = allMonitors[0]
+    }
+
+    return selectMonitor(target)
+}
+
+// Create toolbar with monitor selector and buttons
 function createToolbar(): Gtk.Box {
     const toolbar = new Gtk.Box({ spacing: 12 })
     toolbar.get_style_context().add_class("toolbar")
     toolbar.set_halign(Gtk.Align.CENTER)
+
+    // Monitor selector dropdown
+    const monitorBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
+    const monitorLabel = new Gtk.Label({ label: "Monitor:" })
+    monitorLabel.get_style_context().add_class("toolbar-label")
+
+    const monitorCombo = new Gtk.ComboBoxText()
+    monitorCombo.get_style_context().add_class("toolbar-combo")
+
+    // Populate with available monitors
+    for (const mon of allMonitors) {
+        const dims = getEffectiveDimensions(mon)
+        const portrait = mon.transform === 1 || mon.transform === 3 ? " ↕" : ""
+        monitorCombo.append(mon.name, `${mon.name} (${dims.width}x${dims.height}${portrait})`)
+    }
+    monitorCombo.set_active_id(selectedMonitorName)
+
+    monitorCombo.connect("changed", async () => {
+        const newMonitor = monitorCombo.get_active_id()
+        if (newMonitor && newMonitor !== selectedMonitorName) {
+            monitor = await getMonitorGeometry(newMonitor)
+            currentLayout.monitor = newMonitor
+            hasChanges = true
+            updateZoneDisplay()
+        }
+    })
+
+    monitorBox.pack_start(monitorLabel, false, false, 0)
+    monitorBox.pack_start(monitorCombo, false, false, 0)
 
     // Reset button
     const resetBtn = new Gtk.Button({ label: "Reset" })
@@ -786,6 +832,7 @@ function createToolbar(): Gtk.Box {
     configBtn.get_style_context().add_class("toolbar-save")
     configBtn.connect("clicked", showLayoutPanel)
 
+    toolbar.pack_start(monitorBox, false, false, 0)
     toolbar.pack_start(resetBtn, false, false, 0)
     toolbar.pack_start(cancelBtn, false, false, 0)
     toolbar.pack_start(configBtn, false, false, 0)

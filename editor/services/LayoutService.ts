@@ -129,6 +129,8 @@ function parseAllTomlLayouts(content: string): Layout[] {
                 switch (key) {
                     case 'name': currentLayout.name = cleanValue; break;
                     case 'spacing': currentLayout.spacing = parseInt(cleanValue); break;
+                    case 'monitor': currentLayout.monitor = cleanValue || undefined; break;
+                    case 'workspace': currentLayout.workspace = cleanValue ? parseInt(cleanValue) : undefined; break;
                 }
             }
         }
@@ -225,6 +227,12 @@ function layoutsToToml(layouts: Layout[]): string {
         content += '[[layouts]]\n';
         content += `name = "${normalized.name}"\n`;
         content += `spacing = ${normalized.spacing}\n`;
+        if (normalized.monitor) {
+            content += `monitor = "${normalized.monitor}"\n`;
+        }
+        if (normalized.workspace !== undefined) {
+            content += `workspace = ${normalized.workspace}\n`;
+        }
 
         for (const zone of normalized.zones) {
             content += '\n[[layouts.zones]]\n';

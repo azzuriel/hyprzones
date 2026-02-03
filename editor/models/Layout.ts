@@ -13,6 +13,8 @@ export interface Layout {
     name: string;
     zones: Zone[];
     spacing: number;
+    monitor?: string;    // Monitor name (e.g. "HDMI-A-1"), empty = all monitors
+    workspace?: number;  // Workspace ID, undefined = all workspaces
 }
 
 // A splitter segment - bounded line that separates adjacent zones
@@ -29,6 +31,8 @@ export function cloneLayout(layout: Layout): Layout {
     return {
         name: layout.name,
         spacing: layout.spacing,
+        monitor: layout.monitor,
+        workspace: layout.workspace,
         zones: layout.zones.map(z => ({ ...z }))
     };
 }
