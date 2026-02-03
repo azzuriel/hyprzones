@@ -81,11 +81,14 @@ export function loadAllMappings(): LayoutMapping[] {
         const [ok, contents] = GLib.file_get_contents(CONFIG_PATH);
         if (ok && contents) {
             const content = new TextDecoder().decode(contents);
-            return parseAllTomlMappings(content);
+            const mappings = parseAllTomlMappings(content);
+            console.log('loadAllMappings: found', mappings.length, 'mappings:', JSON.stringify(mappings));
+            return mappings;
         }
     } catch (e) {
         console.error('Failed to load mappings:', e);
     }
+    console.log('loadAllMappings: returning empty array');
     return [];
 }
 

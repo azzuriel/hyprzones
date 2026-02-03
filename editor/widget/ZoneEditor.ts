@@ -724,7 +724,9 @@ function refreshLayoutList() {
 
     // Get all mapped layout names (layouts used in any mapping)
     const mappings = loadAllMappings()
+    console.log('refreshLayoutList: mappings =', JSON.stringify(mappings))
     const mappedLayoutNames = new Set(mappings.map(m => m.layout))
+    console.log('refreshLayoutList: mappedLayoutNames =', [...mappedLayoutNames])
 
     // Add layouts
     const layoutNames = getLayoutNames()
