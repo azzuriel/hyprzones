@@ -7,62 +7,30 @@ namespace HyprZones {
 
 void ZoneManager::computeZonePixels(Layout& layout, double monitorX, double monitorY,
                                     double monitorW, double monitorH, int spacingH, int spacingV) {
-    // FancyZones-style spacing:
-    // - spacing at monitor edges AND between adjacent zones
-    // - For n grid lines: usable_space = total - spacing * n
-    // - Zone positions account for accumulated spacing at each grid line
-    // - spacingH = horizontal gap line = between ROWS (affects Y/height)
-    // - spacingV = vertical gap line = between COLUMNS (affects X/width)
+    // Simple spacing: half-gap insets on internal edges only
+    // - spacingH = horizontal gap line = between ROWS (affects top/bottom)
+    // - spacingV = vertical gap line = between COLUMNS (affects left/right)
+    // - NO spacing at outer edges (x=0, y=0, x+w=1, y+h=1)
 
-    // Collect unique X and Y boundaries (grid lines)
-    std::set<double> xLines, yLines;
-    for (const auto& zone : layout.zones) {
-        xLines.insert(zone.x);
-        xLines.insert(zone.x + zone.width);
-        yLines.insert(zone.y);
-        yLines.insert(zone.y + zone.height);
-    }
-
-    // Convert to sorted vectors for indexing
-    std::vector<double> xVec(xLines.begin(), xLines.end());
-    std::vector<double> yVec(yLines.begin(), yLines.end());
-
-    // Number of spacing slots = number of grid lines
-    int xSlots = static_cast<int>(xVec.size());
-    int ySlots = static_cast<int>(yVec.size());
-
-    // Usable space after all spacing is removed
-    // V affects width (vertical lines between columns), H affects height (horizontal lines between rows)
-    double usableW = monitorW - (spacingV * xSlots);
-    double usableH = monitorH - (spacingH * ySlots);
+    double halfGapH = spacingH / 2.0;
+    double halfGapV = spacingV / 2.0;
 
     for (auto& zone : layout.zones) {
-        // Find index of zone's start boundary in grid
-        int xStartIdx = 0, yStartIdx = 0;
-        int xEndIdx = 0, yEndIdx = 0;
+        double rawX = zone.x * monitorW;
+        double rawY = zone.y * monitorH;
+        double rawW = zone.width * monitorW;
+        double rawH = zone.height * monitorH;
 
-        for (size_t i = 0; i < xVec.size(); ++i) {
-            if (std::abs(xVec[i] - zone.x) < 0.001) xStartIdx = static_cast<int>(i);
-            if (std::abs(xVec[i] - (zone.x + zone.width)) < 0.001) xEndIdx = static_cast<int>(i);
-        }
-        for (size_t i = 0; i < yVec.size(); ++i) {
-            if (std::abs(yVec[i] - zone.y) < 0.001) yStartIdx = static_cast<int>(i);
-            if (std::abs(yVec[i] - (zone.y + zone.height)) < 0.001) yEndIdx = static_cast<int>(i);
-        }
+        // Inset by half-gap on internal edges only (not at 0 or 1)
+        double leftInset = zone.x > 0.001 ? halfGapV : 0;
+        double rightInset = (zone.x + zone.width) < 0.999 ? halfGapV : 0;
+        double topInset = zone.y > 0.001 ? halfGapH : 0;
+        double bottomInset = (zone.y + zone.height) < 0.999 ? halfGapH : 0;
 
-        // Calculate pixel positions:
-        // - Position = usable_space * percent + spacing * (grid_line_index + 1)
-        // - The +1 accounts for the leading edge spacing
-        // V for X (vertical lines), H for Y (horizontal lines)
-        zone.pixelX = monitorX + (zone.x * usableW) + (spacingV * (xStartIdx + 1));
-        zone.pixelY = monitorY + (zone.y * usableH) + (spacingH * (yStartIdx + 1));
-
-        // Width/Height spans from start to end grid line
-        double endX = monitorX + ((zone.x + zone.width) * usableW) + (spacingV * xEndIdx);
-        double endY = monitorY + ((zone.y + zone.height) * usableH) + (spacingH * yEndIdx);
-
-        zone.pixelW = endX - zone.pixelX;
-        zone.pixelH = endY - zone.pixelY;
+        zone.pixelX = monitorX + rawX + leftInset;
+        zone.pixelY = monitorY + rawY + topInset;
+        zone.pixelW = rawW - leftInset - rightInset;
+        zone.pixelH = rawH - topInset - bottomInset;
     }
 }
 
