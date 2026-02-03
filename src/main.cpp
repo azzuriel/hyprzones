@@ -189,12 +189,16 @@ static void onMouseButton(void*, SCallbackInfo&, std::any data) {
                                 origPos.x, origPos.y,
                                 origSize.x, origSize.y);
 
-                            // Move and resize window to zone
-                            window->m_realPosition->setValueAndWarp(Vector2D(x, y));
-                            window->m_realSize->setValueAndWarp(Vector2D(w, h));
+                            // Move and resize window using dispatchers (proper Hyprland way)
+                            std::string moveArg = "exact " +
+                                std::to_string(static_cast<int>(x)) + " " +
+                                std::to_string(static_cast<int>(y));
+                            std::string sizeArg = "exact " +
+                                std::to_string(static_cast<int>(w)) + " " +
+                                std::to_string(static_cast<int>(h));
 
-                            // Update window internals
-                            g_pCompositor->changeWindowZOrder(window, true);
+                            g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
+                            g_pKeybindManager->m_dispatchers["resizewindowpixel"](sizeArg);
                         }
                     }
                 }
