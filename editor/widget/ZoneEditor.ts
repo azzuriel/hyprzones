@@ -732,8 +732,9 @@ function refreshLayoutList() {
 
         // Green checkmark = layout is used in at least one mapping
         if (mappedLayoutNames.has(name)) {
-            const checkLabel = new Gtk.Label({ label: "✓" })
-            checkLabel.set_markup('<span foreground="#00ff00" font_weight="bold" font_size="large">✓</span>')
+            const checkLabel = new Gtk.Label()
+            checkLabel.set_use_markup(true)
+            checkLabel.set_markup('<span foreground="#00ff00" weight="bold" size="large">✓</span>')
             checkLabel.set_margin_start(8)
             rowBox.pack_start(checkLabel, false, false, 0)
         } else {
