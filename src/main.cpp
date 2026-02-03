@@ -434,15 +434,18 @@ static SDispatchResult dispatchCycleLayout(std::string args) {
     return result;
 }
 
-// Dispatcher: Show zones
+// Dispatcher: Toggle zones (show if hidden, hide if visible)
 static SDispatchResult dispatchShowZones(std::string) {
     SDispatchResult result;
 
-    if (!g_renderer->isVisible()) {
+    auto monitor = g_pCompositor->getMonitorFromCursor();
+
+    if (g_renderer->isVisible()) {
+        g_renderer->hide();
+    } else {
         g_renderer->show();
 
-        // Compute zones for current monitor and request single redraw
-        auto monitor = g_pCompositor->getMonitorFromCursor();
+        // Compute zones for current monitor
         if (monitor) {
             auto* layout = g_layoutManager->getLayoutForMonitor(
                 g_config, monitor->m_name,
@@ -454,15 +457,19 @@ static SDispatchResult dispatchShowZones(std::string) {
                     area.x, area.y, area.w, area.h,
                     g_config.zoneGap);
             }
-            g_pHyprRenderer->damageMonitor(monitor);
         }
+    }
+
+    // Request redraw
+    if (monitor) {
+        g_pHyprRenderer->damageMonitor(monitor);
     }
 
     result.success = true;
     return result;
 }
 
-// Dispatcher: Hide zones
+// Dispatcher: Hide zones (kept for compatibility)
 static SDispatchResult dispatchHideZones(std::string) {
     SDispatchResult result;
 
@@ -480,19 +487,36 @@ static SDispatchResult dispatchHideZones(std::string) {
     return result;
 }
 
-// Dispatcher: Open editor
+// Dispatcher: Toggle editor (open if closed, close if open)
 static SDispatchResult dispatchEditor(std::string) {
     SDispatchResult result;
-    // Launch the AGS-based editor
-    if (fork() == 0) {
-        // Child process - try multiple locations
-        execlp("bash", "bash", "-c",
-            "ags run /mnt/code/SRC/GITHUB/hyprzones/editor/app.ts 2>/dev/null || "
-            "ags run ~/.config/hyprzones/editor/app.ts 2>/dev/null || "
-            "ags run /usr/share/hyprzones/editor/app.ts",
-            nullptr);
-        _exit(1);
+
+    // Check if editor is running by looking for ags process with hyprzones
+    FILE* fp = popen("pgrep -f 'ags.*hyprzones/editor'", "r");
+    if (fp) {
+        char buf[32];
+        bool running = (fgets(buf, sizeof(buf), fp) != nullptr);
+        pclose(fp);
+
+        if (running) {
+            // Editor is running - kill it
+            if (fork() == 0) {
+                execlp("pkill", "pkill", "-f", "ags.*hyprzones/editor", nullptr);
+                _exit(1);
+            }
+        } else {
+            // Editor not running - start it
+            if (fork() == 0) {
+                execlp("bash", "bash", "-c",
+                    "ags run /mnt/code/SRC/GITHUB/hyprzones/editor/app.ts 2>/dev/null || "
+                    "ags run ~/.config/hyprzones/editor/app.ts 2>/dev/null || "
+                    "ags run /usr/share/hyprzones/editor/app.ts",
+                    nullptr);
+                _exit(1);
+            }
+        }
     }
+
     result.success = true;
     return result;
 }
