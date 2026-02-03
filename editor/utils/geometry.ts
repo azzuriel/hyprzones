@@ -52,6 +52,8 @@ export function zoneToPixels(
 ): PixelRect {
     // Simple calculation: percentage of monitor size
     // Spacing is applied as inset on internal edges only
+    // spacingH = horizontal gap line = between ROWS (affects top/bottom)
+    // spacingV = vertical gap line = between COLUMNS (affects left/right)
     const halfGapH = spacingH / 2;
     const halfGapV = spacingV / 2;
 
@@ -61,10 +63,11 @@ export function zoneToPixels(
     const rawH = zone.height * monitor.height;
 
     // Inset by half-gap on internal edges (not at 0 or 1)
-    const leftInset = zone.x > 0.001 ? halfGapH : 0;
-    const rightInset = (zone.x + zone.width) < 0.999 ? halfGapH : 0;
-    const topInset = zone.y > 0.001 ? halfGapV : 0;
-    const bottomInset = (zone.y + zone.height) < 0.999 ? halfGapV : 0;
+    // V for left/right (vertical lines between columns), H for top/bottom (horizontal lines between rows)
+    const leftInset = zone.x > 0.001 ? halfGapV : 0;
+    const rightInset = (zone.x + zone.width) < 0.999 ? halfGapV : 0;
+    const topInset = zone.y > 0.001 ? halfGapH : 0;
+    const bottomInset = (zone.y + zone.height) < 0.999 ? halfGapH : 0;
 
     return {
         x: rawX + leftInset,
