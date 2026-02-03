@@ -751,7 +751,7 @@ async function getMonitorGeometry(preferMonitor?: string): Promise<MonitorGeomet
     allMonitors = await fetchAllMonitors()
 
     if (allMonitors.length === 0) {
-        throw new Error("No monitors found. Please ensure Hyprland is running.")
+        throw new Error("Keine Monitore gefunden!\n\nBitte zuerst nwg-displays starten um die Monitor-Konfiguration einzurichten.")
     }
 
     // Priority: 1. preferMonitor, 2. layout.monitor, 3. focused, 4. first
@@ -848,7 +848,7 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
         errorBox.set_margin_end(24)
 
         const errorLabel = new Gtk.Label({
-            label: "Keine Monitore gefunden!\n\nBitte stelle sicher dass Hyprland läuft."
+            label: "Keine Monitore gefunden!\n\nBitte zuerst nwg-displays starten\num die Monitor-Konfiguration einzurichten."
         })
         errorLabel.set_justify(Gtk.Justification.CENTER)
 
