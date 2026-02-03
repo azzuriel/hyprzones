@@ -1,16 +1,64 @@
 #include "hyprzones/ZoneManager.hpp"
 #include <algorithm>
 #include <limits>
+#include <set>
 
 namespace HyprZones {
 
 void ZoneManager::computeZonePixels(Layout& layout, double monitorX, double monitorY,
-                                    double monitorW, double monitorH, int gap) {
+                                    double monitorW, double monitorH, int spacing) {
+    // FancyZones-style spacing:
+    // - spacing at monitor edges AND between adjacent zones
+    // - For n grid lines: usable_space = total - spacing * n
+    // - Zone positions account for accumulated spacing at each grid line
+
+    // Collect unique X and Y boundaries (grid lines)
+    std::set<double> xLines, yLines;
+    for (const auto& zone : layout.zones) {
+        xLines.insert(zone.x);
+        xLines.insert(zone.x + zone.width);
+        yLines.insert(zone.y);
+        yLines.insert(zone.y + zone.height);
+    }
+
+    // Convert to sorted vectors for indexing
+    std::vector<double> xVec(xLines.begin(), xLines.end());
+    std::vector<double> yVec(yLines.begin(), yLines.end());
+
+    // Number of spacing slots = number of grid lines
+    int xSlots = static_cast<int>(xVec.size());
+    int ySlots = static_cast<int>(yVec.size());
+
+    // Usable space after all spacing is removed
+    double usableW = monitorW - (spacing * xSlots);
+    double usableH = monitorH - (spacing * ySlots);
+
     for (auto& zone : layout.zones) {
-        zone.pixelX = monitorX + (zone.x * monitorW) + gap;
-        zone.pixelY = monitorY + (zone.y * monitorH) + gap;
-        zone.pixelW = (zone.width * monitorW) - (2 * gap);
-        zone.pixelH = (zone.height * monitorH) - (2 * gap);
+        // Find index of zone's start boundary in grid
+        int xStartIdx = 0, yStartIdx = 0;
+        int xEndIdx = 0, yEndIdx = 0;
+
+        for (size_t i = 0; i < xVec.size(); ++i) {
+            if (std::abs(xVec[i] - zone.x) < 0.001) xStartIdx = static_cast<int>(i);
+            if (std::abs(xVec[i] - (zone.x + zone.width)) < 0.001) xEndIdx = static_cast<int>(i);
+        }
+        for (size_t i = 0; i < yVec.size(); ++i) {
+            if (std::abs(yVec[i] - zone.y) < 0.001) yStartIdx = static_cast<int>(i);
+            if (std::abs(yVec[i] - (zone.y + zone.height)) < 0.001) yEndIdx = static_cast<int>(i);
+        }
+
+        // Calculate pixel positions:
+        // - Position = usable_space * percent + spacing * (grid_line_index + 1)
+        // - The +1 accounts for the leading edge spacing
+        zone.pixelX = monitorX + (zone.x * usableW) + (spacing * (xStartIdx + 1));
+        zone.pixelY = monitorY + (zone.y * usableH) + (spacing * (yStartIdx + 1));
+
+        // Width/Height spans from start to end grid line
+        double endX = monitorX + ((zone.x + zone.width) * usableW) + (spacing * xEndIdx);
+        double endY = monitorY + ((zone.y + zone.height) * usableH) + (spacing * yEndIdx);
+
+        zone.pixelW = endX - zone.pixelX;
+        zone.pixelH = endY - zone.pixelY;
     }
 }
 
