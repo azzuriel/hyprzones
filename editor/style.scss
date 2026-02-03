@@ -28,10 +28,10 @@ $accent-active: #4a7a4a;
 $info: #3a5a6a;
 $info-light: #5a9cb8;
 
-// === ZONE COLORS (Muted Orange) ===
-$zone-fill: rgba(90, 60, 30, 0.15);
-$zone-fill-hover: rgba(90, 60, 30, 0.25);
-$zone-border: rgba(120, 80, 40, 0.6);
+// === ZONE COLORS (Bright Orange, solid) ===
+$zone-fill: #4a3520;
+$zone-fill-hover: #5a4530;
+$zone-border: #8a6040;
 
 // === SPLITTER COLORS ===
 $splitter-color: #2a2a2a;
@@ -184,5 +184,58 @@ $backdrop: rgba(0, 0, 0, 0.85);
     &:hover {
         background: rgba(138, 74, 74, 0.4);
         border-color: rgba(138, 74, 74, 0.6);
+    }
+}
+
+// ============================================
+// LAYOUT DIALOG
+// ============================================
+
+.layout-dialog {
+    background: $surface-2;
+    border: 1px solid $border-primary;
+    border-radius: 4px;
+    padding: 16px;
+
+    entry {
+        background: $surface-3;
+        border: 1px solid $border-primary;
+        border-radius: 2px;
+        padding: 6px 10px;
+        color: $text-primary;
+        font-family: "Fira Code", monospace;
+
+        &:focus {
+            border-color: $border-hover;
+        }
+    }
+
+    label {
+        color: $text-secondary;
+        font-family: "Fira Code", monospace;
+        font-size: 12px;
+    }
+}
+
+.layout-list {
+    background: $surface-3;
+    border: 1px solid $border-primary;
+    border-radius: 2px;
+
+    row {
+        background: transparent;
+        border-bottom: 1px solid $border-secondary;
+
+        &:hover {
+            background: $surface-4;
+        }
+
+        &:selected {
+            background: $accent-primary;
+
+            label {
+                color: $text-primary;
+            }
+        }
     }
 }

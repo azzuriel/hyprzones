@@ -5,22 +5,49 @@ import { Layout, Zone } from '../models/Layout';
 
 const CONFIG_PATH = GLib.get_home_dir() + '/.config/hypr/hyprzones.toml';
 
-export function loadLayoutFromConfig(): Layout | null {
+export function loadAllLayouts(): Layout[] {
     try {
         const [ok, contents] = GLib.file_get_contents(CONFIG_PATH);
         if (ok && contents) {
             const content = new TextDecoder().decode(contents);
-            return parseTomlLayout(content);
+            return parseAllTomlLayouts(content);
         }
     } catch (e) {
         console.error('Failed to load config:', e);
     }
-    return null;
+    return [];
 }
 
-export function saveLayoutToConfig(layout: Layout): boolean {
+export function loadLayoutFromConfig(): Layout | null {
+    const layouts = loadAllLayouts();
+    return layouts.length > 0 ? layouts[0] : null;
+}
+
+export function loadLayoutByName(name: string): Layout | null {
+    const layouts = loadAllLayouts();
+    return layouts.find(l => l.name === name) || null;
+}
+
+export function getLayoutNames(): string[] {
+    return loadAllLayouts().map(l => l.name);
+}
+
+export function saveLayoutToConfig(layout: Layout, overwrite: boolean = true): boolean {
     try {
-        const content = layoutToToml(layout);
+        const layouts = loadAllLayouts();
+        const existingIndex = layouts.findIndex(l => l.name === layout.name);
+
+        if (existingIndex >= 0) {
+            if (overwrite) {
+                layouts[existingIndex] = layout;
+            } else {
+                return false;
+            }
+        } else {
+            layouts.push(layout);
+        }
+
+        const content = layoutsToToml(layouts);
         GLib.file_set_contents(CONFIG_PATH, content);
         return true;
     } catch (e) {
@@ -29,18 +56,28 @@ export function saveLayoutToConfig(layout: Layout): boolean {
     }
 }
 
-function parseTomlLayout(content: string): Layout | null {
-    const layout: Layout = {
-        name: 'default',
-        spacing: 10,
-        zones: []
-    };
+export function deleteLayout(name: string): boolean {
+    try {
+        const layouts = loadAllLayouts();
+        const filtered = layouts.filter(l => l.name !== name);
+        if (filtered.length === layouts.length) return false;
 
-    const lines = content.split('\n');
+        const content = layoutsToToml(filtered);
+        GLib.file_set_contents(CONFIG_PATH, content);
+        return true;
+    } catch (e) {
+        console.error('Failed to delete layout:', e);
+        return false;
+    }
+}
+
+function parseAllTomlLayouts(content: string): Layout[] {
+    const layouts: Layout[] = [];
+    let currentLayout: Layout | null = null;
     let currentZone: Partial<Zone> | null = null;
     let zoneIndex = 0;
-    let inFirstLayout = false;
-    let firstLayoutFound = false;
+
+    const lines = content.split('\n');
 
     for (const line of lines) {
         const trimmed = line.trim();
@@ -48,25 +85,27 @@ function parseTomlLayout(content: string): Layout | null {
 
         // New layout section
         if (trimmed === '[[layouts]]') {
-            if (firstLayoutFound) {
-                // We hit a second layout - save current zone and stop
+            // Save previous layout
+            if (currentLayout) {
                 if (currentZone && currentZone.name) {
-                    layout.zones.push(currentZone as Zone);
-                    currentZone = null;
+                    currentLayout.zones.push(currentZone as Zone);
                 }
-                break;
+                if (currentLayout.zones.length > 0) {
+                    layouts.push(currentLayout);
+                }
             }
-            firstLayoutFound = true;
-            inFirstLayout = true;
+            currentLayout = { name: 'unnamed', spacing: 10, zones: [] };
+            currentZone = null;
+            zoneIndex = 0;
             continue;
         }
 
         // Zone section within layout
         if (trimmed === '[[layouts.zones]]') {
-            if (!inFirstLayout) continue;
+            if (!currentLayout) continue;
 
             if (currentZone && currentZone.name) {
-                layout.zones.push(currentZone as Zone);
+                currentLayout.zones.push(currentZone as Zone);
             }
             currentZone = { index: zoneIndex++ };
             continue;
@@ -74,11 +113,11 @@ function parseTomlLayout(content: string): Layout | null {
 
         // Parse key=value
         const match = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
-        if (match) {
+        if (match && currentLayout) {
             const [, key, value] = match;
             const cleanValue = value.replace(/"/g, '').trim();
 
-            if (currentZone && inFirstLayout) {
+            if (currentZone) {
                 switch (key) {
                     case 'name': currentZone.name = cleanValue; break;
                     case 'x': currentZone.x = parseFloat(cleanValue) / 100; break;
@@ -86,35 +125,116 @@ function parseTomlLayout(content: string): Layout | null {
                     case 'width': currentZone.width = parseFloat(cleanValue) / 100; break;
                     case 'height': currentZone.height = parseFloat(cleanValue) / 100; break;
                 }
-            } else if (inFirstLayout && !currentZone) {
+            } else {
                 switch (key) {
-                    case 'name': layout.name = cleanValue; break;
-                    case 'spacing': layout.spacing = parseInt(cleanValue); break;
+                    case 'name': currentLayout.name = cleanValue; break;
+                    case 'spacing': currentLayout.spacing = parseInt(cleanValue); break;
                 }
             }
         }
     }
 
-    // Don't forget the last zone if we didn't hit another [[layouts]]
-    if (currentZone && currentZone.name && inFirstLayout) {
-        layout.zones.push(currentZone as Zone);
+    // Save last layout
+    if (currentLayout) {
+        if (currentZone && currentZone.name) {
+            currentLayout.zones.push(currentZone as Zone);
+        }
+        if (currentLayout.zones.length > 0) {
+            layouts.push(currentLayout);
+        }
     }
 
-    return layout.zones.length > 0 ? layout : null;
+    return layouts;
 }
 
-function layoutToToml(layout: Layout): string {
-    let content = '[[layouts]]\n';
-    content += `name = "${layout.name}"\n`;
-    content += `spacing = ${layout.spacing}\n`;
+// Normalize layout boundaries to prevent floating point errors
+// Snaps shared boundaries to identical values
+function normalizeLayout(layout: Layout): Layout {
+    const zones = layout.zones.map(z => ({ ...z }))
+    const SNAP_THRESHOLD = 0.005 // 0.5% tolerance for snapping
 
-    for (const zone of layout.zones) {
-        content += '\n[[layouts.zones]]\n';
-        content += `name = "${zone.name}"\n`;
-        content += `x = ${Math.round(zone.x * 100)}\n`;
-        content += `y = ${Math.round(zone.y * 100)}\n`;
-        content += `width = ${Math.round(zone.width * 100)}\n`;
-        content += `height = ${Math.round(zone.height * 100)}\n`;
+    // Collect all unique boundary positions
+    const xBoundaries: number[] = []
+    const yBoundaries: number[] = []
+
+    for (const zone of zones) {
+        xBoundaries.push(zone.x, zone.x + zone.width)
+        yBoundaries.push(zone.y, zone.y + zone.height)
+    }
+
+    // Snap boundaries that are close together to the same value
+    function snapValue(value: number, boundaries: number[]): number {
+        for (const boundary of boundaries) {
+            if (Math.abs(value - boundary) < SNAP_THRESHOLD && Math.abs(value - boundary) > 0.0001) {
+                return boundary
+            }
+        }
+        return value
+    }
+
+    // Sort boundaries so we snap to the first occurrence
+    xBoundaries.sort((a, b) => a - b)
+    yBoundaries.sort((a, b) => a - b)
+
+    // Remove near-duplicates from boundaries (keep first)
+    function dedupBoundaries(arr: number[]): number[] {
+        const result: number[] = []
+        for (const val of arr) {
+            if (result.length === 0 || Math.abs(val - result[result.length - 1]) >= SNAP_THRESHOLD) {
+                result.push(val)
+            }
+        }
+        return result
+    }
+
+    const uniqueX = dedupBoundaries(xBoundaries)
+    const uniqueY = dedupBoundaries(yBoundaries)
+
+    // Snap all zone boundaries to the unique values
+    for (const zone of zones) {
+        const oldRight = zone.x + zone.width
+        const oldBottom = zone.y + zone.height
+
+        zone.x = snapValue(zone.x, uniqueX)
+        zone.y = snapValue(zone.y, uniqueY)
+
+        const newRight = snapValue(oldRight, uniqueX)
+        const newBottom = snapValue(oldBottom, uniqueY)
+
+        zone.width = newRight - zone.x
+        zone.height = newBottom - zone.y
+    }
+
+    // Round to integer percentages for clean config
+    for (const zone of zones) {
+        zone.x = Math.round(zone.x * 100) / 100
+        zone.y = Math.round(zone.y * 100) / 100
+        zone.width = Math.round(zone.width * 100) / 100
+        zone.height = Math.round(zone.height * 100) / 100
+    }
+
+    return { ...layout, zones }
+}
+
+function layoutsToToml(layouts: Layout[]): string {
+    let content = '';
+
+    for (const layout of layouts) {
+        const normalized = normalizeLayout(layout)
+
+        content += '[[layouts]]\n';
+        content += `name = "${normalized.name}"\n`;
+        content += `spacing = ${normalized.spacing}\n`;
+
+        for (const zone of normalized.zones) {
+            content += '\n[[layouts.zones]]\n';
+            content += `name = "${zone.name}"\n`;
+            content += `x = ${Math.round(zone.x * 100)}\n`;
+            content += `y = ${Math.round(zone.y * 100)}\n`;
+            content += `width = ${Math.round(zone.width * 100)}\n`;
+            content += `height = ${Math.round(zone.height * 100)}\n`;
+        }
+        content += '\n';
     }
 
     return content;

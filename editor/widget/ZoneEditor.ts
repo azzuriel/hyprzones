@@ -7,7 +7,7 @@ import { execAsync } from "ags/process"
 import GLib from "gi://GLib"
 import { Layout, Zone, cloneLayout, getSplitterSegments, SplitterSegment } from "../models/Layout"
 import { MonitorGeometry, PixelRect, PixelSplitter, zoneToPixels, splitterToPixels, collectGridBoundaries, clamp } from "../utils/geometry"
-import { loadLayoutFromConfig, saveLayoutToConfig } from "../services/LayoutService"
+import { loadLayoutFromConfig, loadLayoutByName, saveLayoutToConfig, getLayoutNames, deleteLayout } from "../services/LayoutService"
 import { reloadConfig } from "../services/HyprzonesIPC"
 
 const WINDOW_NAME = "hyprzones-editor"
@@ -99,20 +99,27 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
     buttonBox.set_valign(Gtk.Align.CENTER)
     buttonBox.get_style_context().add_class("zone-buttons")
 
-    // Vertical split button (split left/right)
-    const splitVBtn = new Gtk.Button({ label: "⬍" })
-    splitVBtn.get_style_context().add_class("zone-split-btn")
-    splitVBtn.set_tooltip_text("Split vertically")
-    splitVBtn.connect("clicked", () => splitZone(zone, 'vertical'))
+    const MIN_SPLIT_SIZE = 300
+    const canSplitV = rect.width >= MIN_SPLIT_SIZE
+    const canSplitH = rect.height >= MIN_SPLIT_SIZE
 
-    // Horizontal split button (split top/bottom)
-    const splitHBtn = new Gtk.Button({ label: "⬌" })
-    splitHBtn.get_style_context().add_class("zone-split-btn")
-    splitHBtn.set_tooltip_text("Split horizontally")
-    splitHBtn.connect("clicked", () => splitZone(zone, 'horizontal'))
+    // Vertical split button (split left/right) - only show if possible
+    if (canSplitV) {
+        const splitVBtn = new Gtk.Button({ label: "⬍" })
+        splitVBtn.get_style_context().add_class("zone-split-btn")
+        splitVBtn.set_tooltip_text("Split vertically")
+        splitVBtn.connect("clicked", () => splitZone(zone, 'vertical'))
+        buttonBox.pack_start(splitVBtn, false, false, 0)
+    }
 
-    buttonBox.pack_start(splitVBtn, false, false, 0)
-    buttonBox.pack_start(splitHBtn, false, false, 0)
+    // Horizontal split button (split top/bottom) - only show if possible
+    if (canSplitH) {
+        const splitHBtn = new Gtk.Button({ label: "⬌" })
+        splitHBtn.get_style_context().add_class("zone-split-btn")
+        splitHBtn.set_tooltip_text("Split horizontally")
+        splitHBtn.connect("clicked", () => splitZone(zone, 'horizontal'))
+        buttonBox.pack_start(splitHBtn, false, false, 0)
+    }
 
     // Center content
     const centerBox = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 8 })
@@ -133,6 +140,16 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
 function splitZone(zone: Zone, direction: 'horizontal' | 'vertical') {
     const zoneIndex = currentLayout.zones.findIndex(z => z.name === zone.name)
     if (zoneIndex === -1) return
+
+    // Check if zone is large enough to split (minimum 300px in split direction)
+    const MIN_SPLIT_SIZE = 300
+    if (direction === 'vertical') {
+        const pixelWidth = zone.width * monitor.width
+        if (pixelWidth < MIN_SPLIT_SIZE) return
+    } else {
+        const pixelHeight = zone.height * monitor.height
+        if (pixelHeight < MIN_SPLIT_SIZE) return
+    }
 
     const newZone: Zone = {
         index: currentLayout.zones.length,
@@ -318,24 +335,53 @@ function findZonesAlongLine(startIdx: number, linePos: number, orientation: 'ver
 
 // Splitter verschieben - use zones captured at drag start (not recalculated)
 function moveSplitterSegment(segment: SplitterSegment, delta: number) {
-    // Use the zones captured at drag start - these don't change during drag
-    // This prevents unrelated splitters at the same position from snapping together
+    // Minimum zone size: 200px converted to percentage
+    const monitorSize = segment.orientation === 'vertical' ? monitor.width : monitor.height
+    const MIN_SIZE = 200 / monitorSize
+
+    // Calculate limits - ALWAYS check both sides regardless of delta direction
+    // Left zones shrink when moving left (delta < 0), so minDelta = -(size - MIN_SIZE)
+    // Right zones shrink when moving right (delta > 0), so maxDelta = size - MIN_SIZE
+    let minDelta = -Infinity
+    let maxDelta = Infinity
+
+    for (const i of dragLeftZones) {
+        const zone = currentLayout.zones[i]
+        const currentSize = segment.orientation === 'vertical' ? zone.width : zone.height
+        // Left zone can shrink by at most (currentSize - MIN_SIZE)
+        // delta >= -(currentSize - MIN_SIZE)
+        minDelta = Math.max(minDelta, MIN_SIZE - currentSize)
+    }
+
+    for (const i of dragRightZones) {
+        const zone = currentLayout.zones[i]
+        const currentSize = segment.orientation === 'vertical' ? zone.width : zone.height
+        // Right zone can shrink by at most (currentSize - MIN_SIZE)
+        // delta <= currentSize - MIN_SIZE
+        maxDelta = Math.min(maxDelta, currentSize - MIN_SIZE)
+    }
+
+    // Clamp delta to allowed range
+    const clampedDelta = Math.max(minDelta, Math.min(maxDelta, delta))
+    if (Math.abs(clampedDelta) < 0.001) return  // No movement possible
+
+    // Apply clamped delta
     for (const i of dragLeftZones) {
         const zone = currentLayout.zones[i]
         if (segment.orientation === 'vertical') {
-            zone.width += delta
+            zone.width += clampedDelta
         } else {
-            zone.height += delta
+            zone.height += clampedDelta
         }
     }
     for (const i of dragRightZones) {
         const zone = currentLayout.zones[i]
         if (segment.orientation === 'vertical') {
-            zone.x += delta
-            zone.width -= delta
+            zone.x += clampedDelta
+            zone.width -= clampedDelta
         } else {
-            zone.y += delta
-            zone.height -= delta
+            zone.y += clampedDelta
+            zone.height -= clampedDelta
         }
     }
 
@@ -350,13 +396,171 @@ function updateSaveButton() {
     }
 }
 
-// Handle save
-async function handleSave() {
-    const success = saveLayoutToConfig(currentLayout)
-    if (success) {
-        await reloadConfig()
-        editorWindow?.hide()
+// Layout manager panel (embedded overlay, not separate window)
+let layoutPanel: Gtk.Box | null = null
+let layoutPanelOverlay: Gtk.Overlay | null = null
+let layoutNameEntry: Gtk.Entry | null = null
+let layoutListBox: Gtk.ListBox | null = null
+
+function createLayoutPanel(): Gtk.Box {
+    const panel = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 12 })
+    panel.get_style_context().add_class("layout-dialog")
+    panel.set_halign(Gtk.Align.CENTER)
+    panel.set_valign(Gtk.Align.CENTER)
+
+    // Name entry
+    const nameBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
+    const nameLabel = new Gtk.Label({ label: "Name:" })
+    nameLabel.set_width_chars(8)
+    layoutNameEntry = new Gtk.Entry()
+    layoutNameEntry.set_width_chars(30)
+    nameBox.pack_start(nameLabel, false, false, 0)
+    nameBox.pack_start(layoutNameEntry, false, false, 0)
+
+    // Existing layouts list
+    const listLabel = new Gtk.Label({ label: "Existing Layouts:" })
+    listLabel.set_halign(Gtk.Align.START)
+
+    const scrollWindow = new Gtk.ScrolledWindow()
+    scrollWindow.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    scrollWindow.set_min_content_height(150)
+    scrollWindow.set_min_content_width(350)
+
+    layoutListBox = new Gtk.ListBox()
+    layoutListBox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+    layoutListBox.get_style_context().add_class("layout-list")
+
+    layoutListBox.connect("row-selected", (_: Gtk.ListBox, row: Gtk.ListBoxRow | null) => {
+        if (row && layoutNameEntry) {
+            const label = row.get_child() as Gtk.Label
+            layoutNameEntry.set_text(label.get_label())
+        }
+    })
+
+    scrollWindow.add(layoutListBox)
+
+    // Buttons
+    const buttonBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
+    buttonBox.set_halign(Gtk.Align.END)
+
+    const loadBtn = new Gtk.Button({ label: "Load" })
+    loadBtn.get_style_context().add_class("toolbar-button")
+    loadBtn.connect("clicked", () => {
+        if (!layoutNameEntry) return
+        const name = layoutNameEntry.get_text()
+        if (name) {
+            const loaded = loadLayoutByName(name)
+            if (loaded) {
+                currentLayout = loaded
+                originalLayout = cloneLayout(loaded)
+                hasChanges = false
+                updateZoneDisplay()
+                hideLayoutPanel()
+            }
+        }
+    })
+
+    const deleteBtn = new Gtk.Button({ label: "Delete" })
+    deleteBtn.get_style_context().add_class("toolbar-button")
+    deleteBtn.get_style_context().add_class("toolbar-reset")
+    deleteBtn.connect("clicked", () => {
+        if (!layoutNameEntry) return
+        const name = layoutNameEntry.get_text()
+        const layoutNames = getLayoutNames()
+        if (name && layoutNames.includes(name)) {
+            deleteLayout(name)
+            refreshLayoutList()
+        }
+    })
+
+    const saveBtn = new Gtk.Button({ label: "Save" })
+    saveBtn.get_style_context().add_class("toolbar-button")
+    saveBtn.get_style_context().add_class("toolbar-save")
+    saveBtn.connect("clicked", async () => {
+        if (!layoutNameEntry) return
+        const name = layoutNameEntry.get_text()
+        if (name) {
+            currentLayout.name = name
+            const success = saveLayoutToConfig(currentLayout, true)
+            if (success) {
+                await reloadConfig()
+                hasChanges = false
+                updateSaveButton()
+                hideLayoutPanel()
+            }
+        }
+    })
+
+    const cancelBtn = new Gtk.Button({ label: "Cancel" })
+    cancelBtn.get_style_context().add_class("toolbar-button")
+    cancelBtn.connect("clicked", hideLayoutPanel)
+
+    buttonBox.pack_start(deleteBtn, false, false, 0)
+    buttonBox.pack_start(loadBtn, false, false, 0)
+    buttonBox.pack_start(cancelBtn, false, false, 0)
+    buttonBox.pack_start(saveBtn, false, false, 0)
+
+    panel.pack_start(nameBox, false, false, 0)
+    panel.pack_start(listLabel, false, false, 0)
+    panel.pack_start(scrollWindow, true, true, 0)
+    panel.pack_start(buttonBox, false, false, 0)
+
+    return panel
+}
+
+function refreshLayoutList() {
+    if (!layoutListBox) return
+
+    // Clear existing rows
+    layoutListBox.foreach((child: Gtk.Widget) => layoutListBox!.remove(child))
+
+    // Add layouts
+    const layoutNames = getLayoutNames()
+    for (const name of layoutNames) {
+        const row = new Gtk.ListBoxRow()
+        const rowLabel = new Gtk.Label({ label: name })
+        rowLabel.set_halign(Gtk.Align.START)
+        rowLabel.set_margin_top(8)
+        rowLabel.set_margin_bottom(8)
+        rowLabel.set_margin_start(12)
+        row.add(rowLabel)
+        layoutListBox.add(row)
     }
+    layoutListBox.show_all()
+}
+
+function showLayoutPanel() {
+    // Remove old panel if exists
+    if (layoutPanel) {
+        zoneContainer?.remove(layoutPanel)
+        layoutPanel = null
+    }
+
+    // Create new panel
+    layoutPanel = createLayoutPanel()
+    layoutNameEntry?.set_text(currentLayout.name)
+    refreshLayoutList()
+
+    // Center it on screen
+    const panelWidth = 400
+    const panelHeight = 250
+    const x = Math.round((fullScreenWidth - panelWidth) / 2)
+    const y = Math.round((fullScreenHeight - panelHeight) / 2)
+
+    zoneContainer?.put(layoutPanel, x, y)
+    layoutPanel.show_all()
+}
+
+function hideLayoutPanel() {
+    if (layoutPanel && zoneContainer) {
+        zoneContainer.remove(layoutPanel)
+        layoutPanel = null
+    }
+}
+
+// Handle save - show layout panel
+function handleSave() {
+    showLayoutPanel()
 }
 
 // Handle cancel
@@ -401,47 +605,32 @@ async function detectMargins(): Promise<void> {
         )
 
         if (tiledWindows.length > 0) {
-            // Use mode (most common value) for margins instead of min/max
-            // This avoids outliers from special workspaces
-            const xStarts: number[] = []
-            const xEnds: number[] = []
+            let minX = Infinity, maxX = 0
+            let maxY = 0
             const yStarts: number[] = []
-            const yEnds: number[] = []
 
             for (const w of tiledWindows) {
-                xStarts.push(w.at[0])
-                xEnds.push(w.at[0] + w.size[0])
+                minX = Math.min(minX, w.at[0])
+                maxX = Math.max(maxX, w.at[0] + w.size[0])
                 yStarts.push(w.at[1])
-                yEnds.push(w.at[1] + w.size[1])
+                maxY = Math.max(maxY, w.at[1] + w.size[1])
             }
 
-            // Find most common values (mode)
+            // For top: use mode (most common) to account for windows with/without headers
             const mode = (arr: number[]) => {
                 const counts = new Map<number, number>()
-                for (const v of arr) {
-                    counts.set(v, (counts.get(v) || 0) + 1)
-                }
-                let maxCount = 0, modeVal = arr[0]
+                for (const v of arr) counts.set(v, (counts.get(v) || 0) + 1)
+                let maxCount = 0, modeVal = Math.max(...arr)
                 for (const [val, count] of counts) {
-                    if (count > maxCount) {
-                        maxCount = count
-                        modeVal = val
-                    }
+                    if (count > maxCount) { maxCount = count; modeVal = val }
                 }
                 return modeVal
             }
 
-            // For left/top: use most common starting position
-            // For right/bottom: use most common ending position
-            const commonXStart = mode(xStarts)
-            const commonXEnd = mode(xEnds)
-            const commonYStart = mode(yStarts)
-            const commonYEnd = mode(yEnds)
-
-            MARGIN_LEFT = commonXStart
-            MARGIN_RIGHT = fullScreenWidth - commonXEnd
-            MARGIN_TOP = commonYStart
-            MARGIN_BOTTOM = fullScreenHeight - commonYEnd
+            MARGIN_LEFT = minX
+            MARGIN_RIGHT = fullScreenWidth - maxX
+            MARGIN_TOP = mode(yStarts)
+            MARGIN_BOTTOM = fullScreenHeight - maxY
         }
     } catch (e) {
         console.error('Failed to detect margins:', e)
@@ -537,6 +726,7 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
     // Initialize layer shell
     GtkLayerShell.init_for_window(win)
     GtkLayerShell.set_layer(win, GtkLayerShell.Layer.OVERLAY)
+    GtkLayerShell.set_monitor(win, Gdk.Display.get_default()?.get_monitor(0) ?? null)
     GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.TOP, true)
     GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.BOTTOM, true)
     GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.LEFT, true)
