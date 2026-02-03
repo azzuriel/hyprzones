@@ -199,11 +199,27 @@ static void onMouseButton(void*, SCallbackInfo& info, std::any data) {
 
 // Callback: Render (for zone overlay)
 static void onRender(void*, SCallbackInfo&, std::any data) {
-    if (!g_renderer->isVisible())
+    if (!g_renderer || !g_renderer->isVisible())
         return;
 
-    // Get the monitor being rendered
-    auto* monitor = std::any_cast<CMonitor*>(data);
+    // Get the monitor being rendered - try different cast types
+    CMonitor* monitor = nullptr;
+    try {
+        // Try pointer cast first
+        if (data.type() == typeid(CMonitor*)) {
+            monitor = std::any_cast<CMonitor*>(data);
+        }
+    } catch (...) {
+        return;
+    }
+
+    if (!monitor) {
+        // Fallback: get monitor from cursor
+        auto pMon = g_pCompositor->getMonitorFromCursor();
+        if (pMon)
+            monitor = pMon.get();
+    }
+
     if (!monitor)
         return;
 

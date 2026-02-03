@@ -147,11 +147,13 @@ void Renderer::drawNumber(void* monitorPtr, const Zone& zone, int number, const 
     int stride = cairo_image_surface_get_stride(surface);
 
     // Create texture from Cairo data (DRM_FORMAT_ARGB8888 matches Cairo's ARGB32)
+    // keepDataCopy=true ensures data is copied before we destroy the surface
     SP<CTexture> texture = makeShared<CTexture>(
         DRM_FORMAT_ARGB8888,
         data,
         stride,
-        Vector2D(texWidth, texHeight)
+        Vector2D(texWidth, texHeight),
+        true  // keepDataCopy - important! surface gets destroyed after this
     );
 
     cairo_surface_destroy(surface);
