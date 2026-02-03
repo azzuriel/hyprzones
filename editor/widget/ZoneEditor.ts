@@ -664,7 +664,19 @@ function createLayoutPanel(): Gtk.Box {
         const workspaces = wsEntry.get_text() || "*"
         const layout = layoutCombo.get_active_id()
         if (layout) {
-            addMapping({ monitor, workspaces, layout })
+            // Check for existing mapping with same monitor/workspace
+            const mappings = loadAllMappings()
+            const existingIndex = mappings.findIndex(m =>
+                m.monitor === monitor && m.workspaces === workspaces
+            )
+
+            if (existingIndex >= 0) {
+                // Replace existing mapping
+                mappings[existingIndex].layout = layout
+                saveMappings(mappings)
+            } else {
+                addMapping({ monitor, workspaces, layout })
+            }
             await reloadConfig()
             refreshMappingsList()
         }
