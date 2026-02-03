@@ -301,6 +301,31 @@ static std::string cmdReload(eHyprCtlOutputFormat, std::string) {
     return "reloaded";
 }
 
+// IPC: Save layouts to file
+static std::string cmdSave(eHyprCtlOutputFormat, std::string args) {
+    std::string path = args.empty() ? getConfigPath() + ".backup" : args;
+    bool success = g_layoutManager->saveLayouts(path, g_config.layouts);
+    return success ? "saved to " + path : "error: failed to save";
+}
+
+// IPC: Load layouts from file
+static std::string cmdLoad(eHyprCtlOutputFormat, std::string args) {
+    std::string path = args.empty() ? getConfigPath() : args;
+    auto layouts = g_layoutManager->loadLayouts(path);
+    if (layouts.empty()) {
+        return "error: no layouts loaded from " + path;
+    }
+    g_config.layouts = layouts;
+    g_config.layoutIndex.clear();
+    for (size_t i = 0; i < g_config.layouts.size(); ++i) {
+        g_config.layoutIndex[g_config.layouts[i].name] = i;
+    }
+    if (!g_config.layouts.empty()) {
+        g_config.activeLayout = g_config.layouts[0].name;
+    }
+    return "loaded " + std::to_string(layouts.size()) + " layouts from " + path;
+}
+
 // Dispatcher: Move to zone
 static SDispatchResult dispatchMoveto(std::string args) {
     SDispatchResult result;
@@ -389,6 +414,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         SHyprCtlCommand{"hyprzones:moveto", true, cmdMoveto});
     HyprlandAPI::registerHyprCtlCommand(g_handle,
         SHyprCtlCommand{"hyprzones:reload", true, cmdReload});
+    HyprlandAPI::registerHyprCtlCommand(g_handle,
+        SHyprCtlCommand{"hyprzones:save", true, cmdSave});
+    HyprlandAPI::registerHyprCtlCommand(g_handle,
+        SHyprCtlCommand{"hyprzones:load", true, cmdLoad});
 
     // Register dispatchers (using V2 API)
     HyprlandAPI::addDispatcherV2(g_handle, "hyprzones:moveto", dispatchMoveto);

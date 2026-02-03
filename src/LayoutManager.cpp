@@ -176,15 +176,90 @@ bool LayoutManager::saveLayouts(const std::string& path, const std::vector<Layou
 }
 
 std::vector<Layout> LayoutManager::loadLayouts(const std::string& path) {
-    // Layouts are loaded via ConfigParser, this is for standalone use
     std::vector<Layout> layouts;
     std::ifstream file(path);
     if (!file.is_open()) {
         return layouts;
     }
 
-    // For now, delegate to the main config loading mechanism
-    // This function exists for potential future standalone layout file support
+    std::string line;
+    Layout currentLayout;
+    Zone currentZone;
+    bool inLayout = false;
+    bool inZone = false;
+
+    auto trim = [](std::string& s) {
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        s.erase(s.find_last_not_of(" \t\r\n") + 1);
+    };
+
+    auto parseString = [](const std::string& value) -> std::string {
+        std::string result = value;
+        if (result.front() == '"') result.erase(0, 1);
+        if (result.back() == '"') result.pop_back();
+        return result;
+    };
+
+    while (std::getline(file, line)) {
+        trim(line);
+        if (line.empty() || line[0] == '#') continue;
+
+        if (line == "[[layouts]]") {
+            if (inLayout && !currentLayout.name.empty()) {
+                if (inZone && !currentZone.name.empty()) {
+                    currentLayout.zones.push_back(currentZone);
+                }
+                layouts.push_back(currentLayout);
+            }
+            currentLayout = Layout();
+            currentZone = Zone();
+            inLayout = true;
+            inZone = false;
+            continue;
+        }
+
+        if (line == "[[layouts.zones]]") {
+            if (inZone && !currentZone.name.empty()) {
+                currentLayout.zones.push_back(currentZone);
+            }
+            currentZone = Zone();
+            currentZone.index = static_cast<int>(currentLayout.zones.size());
+            inZone = true;
+            continue;
+        }
+
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+
+        std::string key = line.substr(0, eq);
+        std::string value = line.substr(eq + 1);
+        trim(key);
+        trim(value);
+
+        if (inZone) {
+            if (key == "name") currentZone.name = parseString(value);
+            else if (key == "x") currentZone.x = std::stod(value) / 100.0;
+            else if (key == "y") currentZone.y = std::stod(value) / 100.0;
+            else if (key == "width") currentZone.width = std::stod(value) / 100.0;
+            else if (key == "height") currentZone.height = std::stod(value) / 100.0;
+        } else if (inLayout) {
+            if (key == "name") currentLayout.name = parseString(value);
+            else if (key == "hotkey") currentLayout.hotkey = parseString(value);
+            else if (key == "monitor") currentLayout.monitor = parseString(value);
+            else if (key == "workspace") currentLayout.workspace = std::stoi(value);
+            else if (key == "template") currentLayout.templateType = parseString(value);
+            else if (key == "columns") currentLayout.columns = std::stoi(value);
+            else if (key == "rows") currentLayout.rows = std::stoi(value);
+        }
+    }
+
+    if (inLayout && !currentLayout.name.empty()) {
+        if (inZone && !currentZone.name.empty()) {
+            currentLayout.zones.push_back(currentZone);
+        }
+        layouts.push_back(currentLayout);
+    }
+
     return layouts;
 }
 

@@ -10,3 +10,5 @@
 - **NEVER delete code to avoid implementation** - implement the code, don't remove it
 - **NO stubs** - all functions must be fully implemented
 - **NO TODOs** - do it right immediately
+- **NO orphaned code** - all functions/methods must be used; if you implement something, use it
+- **NO dead code** - remove unused code, don't leave it hanging
