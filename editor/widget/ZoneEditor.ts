@@ -751,13 +751,7 @@ async function getMonitorGeometry(preferMonitor?: string): Promise<MonitorGeomet
     allMonitors = await fetchAllMonitors()
 
     if (allMonitors.length === 0) {
-        // Fallback if no monitors found - use margins
-        return {
-            x: MARGIN_LEFT,
-            y: MARGIN_TOP,
-            width: 1920 - MARGIN_LEFT - MARGIN_RIGHT,
-            height: 1080 - MARGIN_TOP - MARGIN_BOTTOM + HEADER_BAR_HEIGHT
-        }
+        throw new Error("No monitors found. Please ensure Hyprland is running.")
     }
 
     // Priority: 1. preferMonitor, 2. layout.monitor, 3. focused, 4. first
@@ -842,7 +836,32 @@ function createToolbar(): Gtk.Box {
 
 export default async function ZoneEditor(): Promise<Gtk.Window> {
     // Get monitor info
-    monitor = await getMonitorGeometry()
+    try {
+        monitor = await getMonitorGeometry()
+    } catch (e) {
+        // Show error dialog if no monitors found
+        const errorWin = new Gtk.Window({ title: "Error" })
+        const errorBox = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 16 })
+        errorBox.set_margin_top(24)
+        errorBox.set_margin_bottom(24)
+        errorBox.set_margin_start(24)
+        errorBox.set_margin_end(24)
+
+        const errorLabel = new Gtk.Label({
+            label: "Keine Monitore gefunden!\n\nBitte stelle sicher dass Hyprland läuft."
+        })
+        errorLabel.set_justify(Gtk.Justification.CENTER)
+
+        const okBtn = new Gtk.Button({ label: "OK" })
+        okBtn.connect("clicked", () => errorWin.destroy())
+
+        errorBox.pack_start(errorLabel, false, false, 0)
+        errorBox.pack_start(okBtn, false, false, 0)
+        errorWin.add(errorBox)
+        errorWin.show_all()
+
+        return errorWin
+    }
 
     // Load or use default layout
     const loadedLayout = loadLayoutFromConfig()
