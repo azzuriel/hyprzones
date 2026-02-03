@@ -1,0 +1,16 @@
+[repository]
+name = "hyprzones"
+authors = ["Your Name"]
+commit_pins = [
+    # Pin specific Hyprland versions here
+    # ["hyprland-commit-hash", "hyprzones-commit-hash"]
+]
+
+[hyprzones]
+description = "Zone-based window tiling inspired by FancyZones"
+authors = ["Your Name"]
+output = "libhyprzones.so"
+build = [
+    "cmake -DCMAKE_BUILD_TYPE=Release -B build",
+    "cmake --build build"
+]

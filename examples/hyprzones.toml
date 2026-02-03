@@ -1,0 +1,205 @@
+# HyprZones Configuration Example
+# Place this file at: ~/.config/hypr/hyprzones.toml
+
+[general]
+# Key to hold while dragging to activate zone snapping
+snap_modifier = "SHIFT"
+
+# Show zone numbers in overlay
+show_zone_numbers = true
+
+# Colors (rgba or hex format)
+zone_highlight_color = "rgba(0, 100, 255, 0.3)"
+zone_border_color = "rgba(0, 100, 255, 0.8)"
+zone_inactive_color = "rgba(100, 100, 100, 0.2)"
+zone_number_color = "rgba(255, 255, 255, 0.9)"
+
+# Border and margin settings
+zone_border_width = 2
+zone_margin = 5
+
+# Behavior
+move_to_last_known_zone = true    # Remember window zones
+restore_size_on_unsnap = true     # Restore original size when leaving zone
+allow_multi_zone = true           # Allow spanning multiple zones with Ctrl
+flash_on_layout_change = true     # Visual feedback on layout switch
+
+# ============================================================================
+# LAYOUT: Development (PyCharm style)
+# ============================================================================
+[[layouts]]
+name = "development"
+hotkey = "SUPER+CTRL+1"
+
+# Left sidebar (Project explorer, etc.)
+[[layouts.zones]]
+name = "sidebar"
+x = 0
+y = 0
+width = 20
+height = 100
+
+# Main editor area
+[[layouts.zones]]
+name = "main"
+x = 20
+y = 0
+width = 50
+height = 70
+
+# Bottom panel (Terminal, Output)
+[[layouts.zones]]
+name = "terminal"
+x = 20
+y = 70
+width = 50
+height = 30
+
+# Right panel (Structure, Git, etc.)
+[[layouts.zones]]
+name = "tools"
+x = 70
+y = 0
+width = 30
+height = 100
+
+# ============================================================================
+# LAYOUT: Simple 3 Columns
+# ============================================================================
+[[layouts]]
+name = "columns-3"
+hotkey = "SUPER+CTRL+2"
+template = "columns"
+columns = 3
+
+# ============================================================================
+# LAYOUT: Simple 2 Rows
+# ============================================================================
+[[layouts]]
+name = "rows-2"
+hotkey = "SUPER+CTRL+3"
+template = "rows"
+rows = 2
+
+# ============================================================================
+# LAYOUT: 2x2 Grid
+# ============================================================================
+[[layouts]]
+name = "grid-2x2"
+hotkey = "SUPER+CTRL+4"
+template = "grid"
+columns = 2
+rows = 2
+
+# ============================================================================
+# LAYOUT: Main + Side
+# ============================================================================
+[[layouts]]
+name = "main-side"
+hotkey = "SUPER+CTRL+5"
+template = "main-side"
+
+# ============================================================================
+# LAYOUT: Audio Production (Your WS9 layout)
+# ============================================================================
+[[layouts]]
+name = "audio"
+hotkey = "SUPER+CTRL+9"
+
+# EasyEffects (top-left)
+[[layouts.zones]]
+name = "easyeffects"
+x = 0
+y = 0
+width = 20
+height = 80
+
+# Blueman (bottom-left)
+[[layouts.zones]]
+name = "blueman"
+x = 0
+y = 80
+width = 20
+height = 20
+
+# qpwgraph (right, full height)
+[[layouts.zones]]
+name = "qpwgraph"
+x = 20
+y = 0
+width = 80
+height = 100
+
+# ============================================================================
+# LAYOUT: Complex Development (Your WS3 layout)
+# ============================================================================
+[[layouts]]
+name = "pycharm-dev"
+hotkey = "SUPER+CTRL+3"
+
+# Column 1: Notifications (top), Terminal (bottom)
+[[layouts.zones]]
+name = "notifications"
+x = 0
+y = 0
+width = 24
+height = 26
+
+[[layouts.zones]]
+name = "terminal-pycharm"
+x = 0
+y = 26
+width = 24
+height = 74
+
+# Column 2: Problems (top), Structure (middle), Commit (bottom)
+[[layouts.zones]]
+name = "problems"
+x = 24
+y = 0
+width = 13
+height = 26
+
+[[layouts.zones]]
+name = "structure"
+x = 24
+y = 26
+width = 13
+height = 36
+
+[[layouts.zones]]
+name = "commit"
+x = 24
+y = 62
+width = 13
+height = 38
+
+# Column 3: Project (full height)
+[[layouts.zones]]
+name = "project"
+x = 37
+y = 0
+width = 11
+height = 100
+
+# Column 4: Main editor (top), Git (middle), Shell (bottom)
+[[layouts.zones]]
+name = "main-editor"
+x = 48
+y = 0
+width = 52
+height = 47
+
+[[layouts.zones]]
+name = "git"
+x = 48
+y = 47
+width = 52
+height = 25
+
+[[layouts.zones]]
+name = "terminal-shell"
+x = 48
+y = 72
+width = 52
+height = 28
