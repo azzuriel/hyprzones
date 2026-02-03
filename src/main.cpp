@@ -121,6 +121,15 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
         return;
     }
 
+    auto* layout = g_layoutManager->getLayoutForMonitor(
+        g_config, getCurrentMonitorName(), getCurrentWorkspaceID()
+    );
+
+    if (!layout)
+        return;
+
+    auto monitor = g_pCompositor->getMonitorFromCursor();
+
     // Start or continue zone snapping
     if (!g_dragState.isDragging) {
         g_dragState.isDragging = true;
@@ -130,49 +139,44 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
         g_dragState.dragStartY = coords.y;
         g_dragState.ctrlHeld = mods & HL_MODIFIER_CTRL;
         g_renderer->show();
+
+        // Compute zone pixels only once at drag start
+        if (monitor) {
+            auto area = getUsableMonitorArea(monitor.get());
+            g_zoneManager->computeZonePixels(*layout,
+                area.x, area.y, area.w, area.h,
+                g_config.zoneGap);
+        }
     }
 
     g_dragState.currentX = coords.x;
     g_dragState.currentY = coords.y;
 
-    auto* layout = g_layoutManager->getLayoutForMonitor(
-        g_config, getCurrentMonitorName(), getCurrentWorkspaceID()
-    );
-
-    if (!layout)
-        return;
-
-    // Compute zone pixels
-    auto monitor = g_pCompositor->getMonitorFromCursor();
-    if (monitor) {
-        auto area = getUsableMonitorArea(monitor.get());
-        g_zoneManager->computeZonePixels(*layout,
-            area.x, area.y, area.w, area.h,
-            g_config.zoneGap);
-    }
-
     int zone = g_zoneManager->getSmallestZoneAtPoint(*layout,
         g_dragState.currentX, g_dragState.currentY);
 
-    g_dragState.currentZone = zone;
+    // Only update and request damage if zone changed
+    if (zone != g_dragState.currentZone) {
+        g_dragState.currentZone = zone;
 
-    if (zone >= 0) {
-        if (g_dragState.ctrlHeld && g_dragState.startZone >= 0) {
-            g_dragState.selectedZones = g_zoneManager->getZoneRange(
-                *layout, g_dragState.startZone, zone);
-        } else {
-            g_dragState.selectedZones = {zone};
-            if (g_dragState.startZone < 0) {
-                g_dragState.startZone = zone;
+        if (zone >= 0) {
+            if (g_dragState.ctrlHeld && g_dragState.startZone >= 0) {
+                g_dragState.selectedZones = g_zoneManager->getZoneRange(
+                    *layout, g_dragState.startZone, zone);
+            } else {
+                g_dragState.selectedZones = {zone};
+                if (g_dragState.startZone < 0) {
+                    g_dragState.startZone = zone;
+                }
             }
+        } else {
+            g_dragState.selectedZones.clear();
         }
-    } else {
-        g_dragState.selectedZones.clear();
-    }
 
-    // Always request damage while dragging - the window moves and covers the overlay
-    if (monitor) {
-        g_pHyprRenderer->damageMonitor(monitor);
+        // Request damage only when zone changes
+        if (monitor) {
+            g_pHyprRenderer->damageMonitor(monitor);
+        }
     }
 }
 
