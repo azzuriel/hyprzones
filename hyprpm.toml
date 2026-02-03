@@ -9,7 +9,7 @@ commit_pins = [
 [hyprzones]
 description = "Zone-based window tiling inspired by FancyZones"
 authors = ["Jan Ohlmann (azzuriel)"]
-output = "hyprzones.so"
+output = "build/hyprzones.so"
 build = [
     "cmake -DCMAKE_BUILD_TYPE=Release -B build",
     "cmake --build build"
