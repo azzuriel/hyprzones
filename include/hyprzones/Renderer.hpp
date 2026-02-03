@@ -18,9 +18,10 @@ class Renderer {
                        const std::vector<int>& highlightedZones,
                        const Config& config);
 
-    void show();
+    void show(bool manual = false);
     void hide();
     bool isVisible() const { return m_visible; }
+    bool isManuallyOpened() const { return m_manuallyOpened; }
 
     void setAlpha(float a) { m_alpha = a; }
     float getAlpha() const { return m_alpha; }
@@ -30,6 +31,7 @@ class Renderer {
 
   private:
     bool  m_visible = false;
+    bool  m_manuallyOpened = false;
     float m_alpha   = 0.8f;
     bool  m_needsRedraw = true;
     std::string m_cachedLayoutName;

@@ -24,16 +24,20 @@ Renderer::~Renderer() {
     clearCache();
 }
 
-void Renderer::show() {
+void Renderer::show(bool manual) {
     if (!m_visible) {
         m_visible = true;
         m_needsRedraw = true;
+    }
+    if (manual) {
+        m_manuallyOpened = true;
     }
 }
 
 void Renderer::hide() {
     if (m_visible) {
         m_visible = false;
+        m_manuallyOpened = false;
         clearCache();
     }
 }

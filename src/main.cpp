@@ -82,10 +82,13 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
     auto draggedWindow = g_pInputManager->m_currentlyDraggedWindow.lock();
 
     if (!draggedWindow) {
-        // No window being dragged - hide overlay if it was shown
+        // No window being dragged - reset drag state
         if (g_dragState.isDragging) {
             g_dragState.reset();
-            g_renderer->hide();
+            // Only auto-hide if not manually opened
+            if (!g_renderer->isManuallyOpened()) {
+                g_renderer->hide();
+            }
         }
         return;
     }
@@ -110,7 +113,10 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
     if (!shouldActivate) {
         if (g_dragState.isZoneSnapping) {
             g_dragState.reset();
-            g_renderer->hide();
+            // Only auto-hide if not manually opened
+            if (!g_renderer->isManuallyOpened()) {
+                g_renderer->hide();
+            }
         }
         return;
     }
@@ -249,7 +255,10 @@ static void onMouseButton(void*, SCallbackInfo&, std::any data) {
         }
 
         g_dragState.reset();
-        g_renderer->hide();
+        // Only auto-hide if not manually opened
+        if (!g_renderer->isManuallyOpened()) {
+            g_renderer->hide();
+        }
     }
 }
 
@@ -437,7 +446,7 @@ static SDispatchResult dispatchShowZones(std::string) {
     if (g_renderer->isVisible()) {
         g_renderer->hide();
     } else {
-        g_renderer->show();
+        g_renderer->show(true);  // Mark as manually opened
 
         // Compute zones for current monitor
         if (monitor) {
