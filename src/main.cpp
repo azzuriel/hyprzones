@@ -14,6 +14,7 @@
 #include <hyprland/src/SharedDefs.hpp>
 
 #include <unistd.h>
+#include <sstream>
 
 #include "hyprzones/Globals.hpp"
 #include "hyprzones/Config.hpp"
@@ -191,6 +192,15 @@ static void onMouseButton(void*, SCallbackInfo&, std::any data) {
                     g_config, getCurrentMonitorName(), getCurrentWorkspaceID());
 
                 if (layout) {
+                    // Compute zone pixels before getting combined box
+                    auto monitor = g_pCompositor->getMonitorFromCursor();
+                    if (monitor) {
+                        auto area = getUsableMonitorArea(monitor.get());
+                        g_zoneManager->computeZonePixels(*layout,
+                            area.x, area.y, area.w, area.h,
+                            g_config.zoneGap);
+                    }
+
                     // Get combined zone box
                     double x, y, w, h;
                     g_zoneManager->getCombinedZoneBox(*layout,
@@ -217,13 +227,18 @@ static void onMouseButton(void*, SCallbackInfo&, std::any data) {
                                 origPos.x, origPos.y,
                                 origSize.x, origSize.y);
 
-                            // Move and resize window using dispatchers (proper Hyprland way)
+                            // Build window address string for dispatcher
+                            std::stringstream addrStream;
+                            addrStream << std::hex << reinterpret_cast<uintptr_t>(window.get());
+                            std::string windowAddr = "address:0x" + addrStream.str();
+
+                            // Move and resize window using dispatchers with explicit window address
                             std::string moveArg = "exact " +
                                 std::to_string(static_cast<int>(x)) + " " +
-                                std::to_string(static_cast<int>(y));
+                                std::to_string(static_cast<int>(y)) + "," + windowAddr;
                             std::string sizeArg = "exact " +
                                 std::to_string(static_cast<int>(w)) + " " +
-                                std::to_string(static_cast<int>(h));
+                                std::to_string(static_cast<int>(h)) + "," + windowAddr;
 
                             g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
                             g_pKeybindManager->m_dispatchers["resizewindowpixel"](sizeArg);
