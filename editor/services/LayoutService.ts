@@ -49,7 +49,8 @@ export function saveLayoutToConfig(layout: Layout, overwrite: boolean = true): b
 
         const mappings = loadAllMappings();
         const content = configToToml(layouts, mappings);
-        GLib.file_set_contents(CONFIG_PATH, content);
+        const encoder = new TextEncoder();
+        GLib.file_set_contents(CONFIG_PATH, encoder.encode(content));
         return true;
     } catch (e) {
         console.error('Failed to save config:', e);
@@ -65,7 +66,8 @@ export function deleteLayout(name: string): boolean {
 
         const mappings = loadAllMappings();
         const content = configToToml(filtered, mappings);
-        GLib.file_set_contents(CONFIG_PATH, content);
+        const encoder = new TextEncoder();
+        GLib.file_set_contents(CONFIG_PATH, encoder.encode(content));
         return true;
     } catch (e) {
         console.error('Failed to delete layout:', e);
@@ -91,7 +93,8 @@ export function saveMappings(mappings: LayoutMapping[]): boolean {
     try {
         const layouts = loadAllLayouts();
         const content = configToToml(layouts, mappings);
-        GLib.file_set_contents(CONFIG_PATH, content);
+        const encoder = new TextEncoder();
+        GLib.file_set_contents(CONFIG_PATH, encoder.encode(content));
         return true;
     } catch (e) {
         console.error('Failed to save mappings:', e);

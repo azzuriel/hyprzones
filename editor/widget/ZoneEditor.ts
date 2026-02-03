@@ -734,11 +734,15 @@ function refreshLayoutList() {
 
         // Green/gray dot = layout is/isn't used in mappings
         const isMapped = mappedLayoutNames.has(name)
-        const indicator = new Gtk.Label({ label: isMapped ? "●" : "○" })
+        const indicator = new Gtk.Label()
+        indicator.set_use_markup(true)
+        if (isMapped) {
+            indicator.set_label('<span foreground="#00ff00" size="large">●</span>')
+        } else {
+            indicator.set_label('<span foreground="#555555" size="large">○</span>')
+        }
         indicator.set_margin_start(8)
         indicator.set_margin_end(4)
-        // Apply CSS class for color
-        indicator.get_style_context().add_class(isMapped ? "indicator-active" : "indicator-inactive")
         rowBox.pack_start(indicator, false, false, 0)
 
         const rowLabel = new Gtk.Label({ label: name })
@@ -1030,15 +1034,25 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
     editorWindow = win
 
     // Initialize layer shell
-    GtkLayerShell.init_for_window(win)
-    GtkLayerShell.set_layer(win, GtkLayerShell.Layer.OVERLAY)
-    GtkLayerShell.set_monitor(win, Gdk.Display.get_default()?.get_monitor(0) ?? null)
-    GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.TOP, true)
-    GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.BOTTOM, true)
-    GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.LEFT, true)
-    GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.RIGHT, true)
-    GtkLayerShell.set_exclusive_zone(win, -1)
-    GtkLayerShell.set_keyboard_mode(win, GtkLayerShell.KeyboardMode.ON_DEMAND)
+    try {
+        GtkLayerShell.init_for_window(win)
+        GtkLayerShell.set_layer(win, GtkLayerShell.Layer.OVERLAY)
+        const display = Gdk.Display.get_default()
+        if (display) {
+            const monitor = display.get_monitor(0)
+            if (monitor) {
+                GtkLayerShell.set_monitor(win, monitor)
+            }
+        }
+        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.TOP, true)
+        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.BOTTOM, true)
+        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.LEFT, true)
+        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.RIGHT, true)
+        GtkLayerShell.set_exclusive_zone(win, -1)
+        GtkLayerShell.set_keyboard_mode(win, GtkLayerShell.KeyboardMode.ON_DEMAND)
+    } catch (e) {
+        console.error("Layer shell init failed:", e)
+    }
 
     // Handle close
     win.connect("delete-event", () => {
