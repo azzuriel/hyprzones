@@ -53,6 +53,26 @@ static int getCurrentWorkspaceID() {
     return monitor->m_activeWorkspace->m_id;
 }
 
+// Helper: Get usable monitor area (accounting for waybar, gaps, etc.)
+// Must match editor margins: TOP=97, BOTTOM=22, LEFT=22, RIGHT=22
+struct UsableArea {
+    double x, y, w, h;
+};
+
+static UsableArea getUsableMonitorArea(CMonitor* monitor) {
+    constexpr int MARGIN_TOP = 97;
+    constexpr int MARGIN_BOTTOM = 22;
+    constexpr int MARGIN_LEFT = 22;
+    constexpr int MARGIN_RIGHT = 22;
+
+    UsableArea area;
+    area.x = monitor->m_position.x + MARGIN_LEFT;
+    area.y = monitor->m_position.y + MARGIN_TOP;
+    area.w = monitor->m_size.x - MARGIN_LEFT - MARGIN_RIGHT;
+    area.h = monitor->m_size.y - MARGIN_TOP - MARGIN_BOTTOM;
+    return area;
+}
+
 // Callback: Mouse move
 static void onMouseMove(void*, SCallbackInfo&, std::any data) {
     auto coords = std::any_cast<const Vector2D>(data);
@@ -118,9 +138,9 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
     // Compute zone pixels
     auto monitor = g_pCompositor->getMonitorFromCursor();
     if (monitor) {
+        auto area = getUsableMonitorArea(monitor.get());
         g_zoneManager->computeZonePixels(*layout,
-            monitor->m_position.x, monitor->m_position.y,
-            monitor->m_size.x, monitor->m_size.y,
+            area.x, area.y, area.w, area.h,
             g_config.zoneGap);
     }
 
@@ -258,9 +278,9 @@ static void onRender(void*, SCallbackInfo&, std::any data) {
         return;
 
     // Compute zone pixels if needed
+    auto area = getUsableMonitorArea(monitor);
     g_zoneManager->computeZonePixels(*layout,
-        monitor->m_position.x, monitor->m_position.y,
-        monitor->m_size.x, monitor->m_size.y,
+        area.x, area.y, area.w, area.h,
         g_config.zoneGap);
 
     // Render the overlay
@@ -314,9 +334,9 @@ static std::string cmdMoveto(eHyprCtlOutputFormat, std::string args) {
     // Compute zone pixels
     auto monitor = g_pCompositor->getMonitorFromCursor();
     if (monitor) {
+        auto area = getUsableMonitorArea(monitor.get());
         g_zoneManager->computeZonePixels(*layout,
-            monitor->m_position.x, monitor->m_position.y,
-            monitor->m_size.x, monitor->m_size.y,
+            area.x, area.y, area.w, area.h,
             g_config.zoneGap);
     }
 
@@ -414,9 +434,9 @@ static SDispatchResult dispatchShowZones(std::string) {
                 monitor->m_activeWorkspace ? monitor->m_activeWorkspace->m_id : -1
             );
             if (layout) {
+                auto area = getUsableMonitorArea(monitor.get());
                 g_zoneManager->computeZonePixels(*layout,
-                    monitor->m_position.x, monitor->m_position.y,
-                    monitor->m_size.x, monitor->m_size.y,
+                    area.x, area.y, area.w, area.h,
                     g_config.zoneGap);
             }
             g_pHyprRenderer->damageMonitor(monitor);
