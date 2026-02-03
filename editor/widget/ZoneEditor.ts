@@ -65,6 +65,11 @@ let zoneContainer: Gtk.Fixed
 function updateZoneDisplay() {
     if (!zoneContainer) return
 
+    // Reset widget references before destroying (they will be destroyed with children)
+    layoutPanel = null
+    layoutNameEntry = null
+    layoutListBox = null
+
     zoneContainer.get_children().forEach(child => child.destroy())
 
     const gridBounds = collectGridBoundaries(currentLayout.zones)
