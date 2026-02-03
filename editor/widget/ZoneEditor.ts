@@ -679,6 +679,7 @@ function createLayoutPanel(): Gtk.Box {
             }
             await reloadConfig()
             refreshMappingsList()
+            refreshLayoutList()
         }
     })
 
@@ -732,7 +733,7 @@ function refreshLayoutList() {
         // Green checkmark = layout is used in at least one mapping
         if (mappedLayoutNames.has(name)) {
             const checkLabel = new Gtk.Label({ label: "✓" })
-            checkLabel.get_style_context().add_class("active-layout-check")
+            checkLabel.set_markup('<span foreground="#00ff00" font_weight="bold" font_size="large">✓</span>')
             checkLabel.set_margin_start(8)
             rowBox.pack_start(checkLabel, false, false, 0)
         } else {
@@ -799,6 +800,7 @@ function refreshMappingsList() {
             removeMapping(index)
             await reloadConfig()
             refreshMappingsList()
+            refreshLayoutList()
         })
 
         rowBox.pack_start(monitorLabel, false, false, 0)
