@@ -1,4 +1,5 @@
 #include "hyprzones/LayoutManager.hpp"
+#include <fstream>
 
 namespace HyprZones {
 
@@ -135,14 +136,56 @@ void LayoutManager::cycleLayout(Config& config, int direction) {
 }
 
 bool LayoutManager::saveLayouts(const std::string& path, const std::vector<Layout>& layouts) {
-    (void)path;
-    (void)layouts;
-    return false;
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    for (const auto& layout : layouts) {
+        file << "[[layouts]]\n";
+        file << "name = \"" << layout.name << "\"\n";
+
+        if (!layout.hotkey.empty()) {
+            file << "hotkey = \"" << layout.hotkey << "\"\n";
+        }
+        if (!layout.monitor.empty()) {
+            file << "monitor = \"" << layout.monitor << "\"\n";
+        }
+        if (layout.workspace >= 0) {
+            file << "workspace = " << layout.workspace << "\n";
+        }
+        if (!layout.templateType.empty()) {
+            file << "template = \"" << layout.templateType << "\"\n";
+            if (layout.columns > 0) file << "columns = " << layout.columns << "\n";
+            if (layout.rows > 0) file << "rows = " << layout.rows << "\n";
+        }
+
+        for (const auto& zone : layout.zones) {
+            file << "\n[[layouts.zones]]\n";
+            file << "name = \"" << zone.name << "\"\n";
+            file << "x = " << static_cast<int>(zone.x * 100) << "\n";
+            file << "y = " << static_cast<int>(zone.y * 100) << "\n";
+            file << "width = " << static_cast<int>(zone.width * 100) << "\n";
+            file << "height = " << static_cast<int>(zone.height * 100) << "\n";
+        }
+
+        file << "\n";
+    }
+
+    return true;
 }
 
 std::vector<Layout> LayoutManager::loadLayouts(const std::string& path) {
-    (void)path;
-    return {};
+    // Layouts are loaded via ConfigParser, this is for standalone use
+    std::vector<Layout> layouts;
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return layouts;
+    }
+
+    // For now, delegate to the main config loading mechanism
+    // This function exists for potential future standalone layout file support
+    return layouts;
 }
 
 }  // namespace HyprZones

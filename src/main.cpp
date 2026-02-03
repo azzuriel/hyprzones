@@ -7,6 +7,7 @@
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/devices/IPointer.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
 
@@ -117,8 +118,26 @@ static void onMouseButton(void*, SCallbackInfo& info, std::any data) {
         g_dragState.currentY = coords.y;
 
         // Check modifier key for zone snapping
-        // TODO: Check actual modifier state
-        if (g_config.showOnDrag && !g_config.requireModifier) {
+        uint32_t mods = g_pInputManager->getModsFromAllKBs();
+        bool modifierHeld = false;
+
+        if (g_config.snapModifier == "SHIFT") {
+            modifierHeld = mods & HL_MODIFIER_SHIFT;
+        } else if (g_config.snapModifier == "CTRL" || g_config.snapModifier == "CONTROL") {
+            modifierHeld = mods & HL_MODIFIER_CTRL;
+        } else if (g_config.snapModifier == "ALT") {
+            modifierHeld = mods & HL_MODIFIER_ALT;
+        } else if (g_config.snapModifier == "SUPER" || g_config.snapModifier == "META") {
+            modifierHeld = mods & HL_MODIFIER_META;
+        }
+
+        // Track Ctrl state for multi-zone selection
+        g_dragState.ctrlHeld = mods & HL_MODIFIER_CTRL;
+
+        bool shouldActivate = g_config.showOnDrag &&
+            (!g_config.requireModifier || modifierHeld);
+
+        if (shouldActivate) {
             g_dragState.isZoneSnapping = true;
             g_renderer->show();
 
