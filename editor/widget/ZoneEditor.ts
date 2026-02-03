@@ -554,7 +554,9 @@ function createLayoutPanel(): Gtk.Box {
             if (success) {
                 await reloadConfig()
                 hasChanges = false
+                originalLayout = cloneLayout(currentLayout)
                 refreshLayoutList()
+                updateZoneDisplay()
             }
         }
     })
@@ -730,19 +732,14 @@ function refreshLayoutList() {
         const row = new Gtk.ListBoxRow()
         const rowBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
 
-        // Green checkmark = layout is used in at least one mapping
+        // Green dot = layout is used in at least one mapping
+        const indicator = new Gtk.Label({ label: mappedLayoutNames.has(name) ? "●" : "○" })
+        indicator.set_margin_start(8)
+        indicator.set_margin_end(4)
         if (mappedLayoutNames.has(name)) {
-            const checkLabel = new Gtk.Label()
-            checkLabel.set_use_markup(true)
-            checkLabel.set_markup('<span foreground="#00ff00" weight="bold" size="large">✓</span>')
-            checkLabel.set_margin_start(8)
-            rowBox.pack_start(checkLabel, false, false, 0)
-        } else {
-            // Spacer for alignment
-            const spacer = new Gtk.Label({ label: "  " })
-            spacer.set_margin_start(8)
-            rowBox.pack_start(spacer, false, false, 0)
+            indicator.override_color(Gtk.StateFlags.NORMAL, new Gdk.RGBA({ red: 0, green: 1, blue: 0, alpha: 1 }))
         }
+        rowBox.pack_start(indicator, false, false, 0)
 
         const rowLabel = new Gtk.Label({ label: name })
         rowLabel.set_halign(Gtk.Align.START)
