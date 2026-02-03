@@ -53,10 +53,56 @@ static int getCurrentWorkspaceID() {
 
 // Callback: Mouse move
 static void onMouseMove(void*, SCallbackInfo&, std::any data) {
-    if (!g_dragState.isDragging)
-        return;
-
     auto coords = std::any_cast<const Vector2D>(data);
+
+    // Check if Hyprland is actually dragging a window
+    auto draggedWindow = g_pInputManager->m_currentlyDraggedWindow.lock();
+
+    if (!draggedWindow) {
+        // No window being dragged - hide overlay if it was shown
+        if (g_dragState.isDragging) {
+            g_dragState.reset();
+            g_renderer->hide();
+        }
+        return;
+    }
+
+    // Check modifier key for zone snapping
+    uint32_t mods = g_pInputManager->getModsFromAllKBs();
+    bool modifierHeld = false;
+
+    if (g_config.snapModifier == "SHIFT") {
+        modifierHeld = mods & HL_MODIFIER_SHIFT;
+    } else if (g_config.snapModifier == "CTRL" || g_config.snapModifier == "CONTROL") {
+        modifierHeld = mods & HL_MODIFIER_CTRL;
+    } else if (g_config.snapModifier == "ALT") {
+        modifierHeld = mods & HL_MODIFIER_ALT;
+    } else if (g_config.snapModifier == "SUPER" || g_config.snapModifier == "META") {
+        modifierHeld = mods & HL_MODIFIER_META;
+    }
+
+    bool shouldActivate = g_config.showOnDrag &&
+        (!g_config.requireModifier || modifierHeld);
+
+    if (!shouldActivate) {
+        if (g_dragState.isZoneSnapping) {
+            g_dragState.reset();
+            g_renderer->hide();
+        }
+        return;
+    }
+
+    // Start or continue zone snapping
+    if (!g_dragState.isDragging) {
+        g_dragState.isDragging = true;
+        g_dragState.isZoneSnapping = true;
+        g_dragState.draggedWindow = draggedWindow.get();
+        g_dragState.dragStartX = coords.x;
+        g_dragState.dragStartY = coords.y;
+        g_dragState.ctrlHeld = mods & HL_MODIFIER_CTRL;
+        g_renderer->show();
+    }
+
     g_dragState.currentX = coords.x;
     g_dragState.currentY = coords.y;
 
@@ -64,10 +110,10 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
         g_config, getCurrentMonitorName(), getCurrentWorkspaceID()
     );
 
-    if (!layout || !g_dragState.isZoneSnapping)
+    if (!layout)
         return;
 
-    // Compute zone pixels if not done
+    // Compute zone pixels
     auto monitor = g_pCompositor->getMonitorFromCursor();
     if (monitor) {
         g_zoneManager->computeZonePixels(*layout,
@@ -87,110 +133,77 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
                 *layout, g_dragState.startZone, zone);
         } else {
             g_dragState.selectedZones = {zone};
+            if (g_dragState.startZone < 0) {
+                g_dragState.startZone = zone;
+            }
         }
     } else {
         g_dragState.selectedZones.clear();
     }
+
+    // Request damage for overlay redraw
+    if (monitor) {
+        g_pHyprRenderer->damageMonitor(monitor);
+    }
 }
 
 // Callback: Mouse button
-static void onMouseButton(void*, SCallbackInfo& info, std::any data) {
+static void onMouseButton(void*, SCallbackInfo&, std::any data) {
     auto e = std::any_cast<IPointer::SButtonEvent>(data);
 
-    // Only handle left mouse button
+    // Only handle left mouse button release
     if (e.button != BTN_LEFT)
         return;
 
-    if (e.state == WL_POINTER_BUTTON_STATE_PRESSED) {
-        auto window = getFocusedWindow();
-        if (!window)
-            return;
-
-        // Check if floating (zone snapping only for floating windows)
-        if (!window->m_isFloating)
-            return;
-
-        // Start drag tracking
-        auto coords = g_pInputManager->getMouseCoordsInternal();
-        g_dragState.isDragging = true;
-        g_dragState.draggedWindow = window.get();
-        g_dragState.dragStartX = coords.x;
-        g_dragState.dragStartY = coords.y;
-        g_dragState.currentX = coords.x;
-        g_dragState.currentY = coords.y;
-
-        // Check modifier key for zone snapping
-        uint32_t mods = g_pInputManager->getModsFromAllKBs();
-        bool modifierHeld = false;
-
-        if (g_config.snapModifier == "SHIFT") {
-            modifierHeld = mods & HL_MODIFIER_SHIFT;
-        } else if (g_config.snapModifier == "CTRL" || g_config.snapModifier == "CONTROL") {
-            modifierHeld = mods & HL_MODIFIER_CTRL;
-        } else if (g_config.snapModifier == "ALT") {
-            modifierHeld = mods & HL_MODIFIER_ALT;
-        } else if (g_config.snapModifier == "SUPER" || g_config.snapModifier == "META") {
-            modifierHeld = mods & HL_MODIFIER_META;
-        }
-
-        // Track Ctrl state for multi-zone selection
-        g_dragState.ctrlHeld = mods & HL_MODIFIER_CTRL;
-
-        bool shouldActivate = g_config.showOnDrag &&
-            (!g_config.requireModifier || modifierHeld);
-
-        if (shouldActivate) {
-            g_dragState.isZoneSnapping = true;
-            g_renderer->show();
-
-            auto* layout = g_layoutManager->getLayoutForMonitor(
-                g_config, getCurrentMonitorName(), getCurrentWorkspaceID());
-            if (layout) {
-                g_dragState.startZone = g_zoneManager->getSmallestZoneAtPoint(
-                    *layout, coords.x, coords.y);
-            }
-        }
-    } else {
-        // Button released
+    if (e.state == WL_POINTER_BUTTON_STATE_RELEASED) {
+        // Button released - check if we need to snap to zone
         if (g_dragState.isDragging && g_dragState.isZoneSnapping) {
-            if (!g_dragState.selectedZones.empty()) {
+            if (!g_dragState.selectedZones.empty() && g_dragState.draggedWindow) {
                 auto* layout = g_layoutManager->getLayoutForMonitor(
                     g_config, getCurrentMonitorName(), getCurrentWorkspaceID());
 
-                if (layout && g_dragState.draggedWindow) {
+                if (layout) {
                     // Get combined zone box
                     double x, y, w, h;
                     g_zoneManager->getCombinedZoneBox(*layout,
                         g_dragState.selectedZones, x, y, w, h);
 
                     if (w > 0 && h > 0) {
-                        auto window = reinterpret_cast<Desktop::View::CWindow*>(
-                            g_dragState.draggedWindow);
+                        // Find the actual window handle
+                        PHLWINDOW window;
+                        for (auto& w : g_pCompositor->m_windows) {
+                            if (w.get() == g_dragState.draggedWindow) {
+                                window = w;
+                                break;
+                            }
+                        }
 
-                        // Remember original size
-                        auto origBox = window->logicalBox();
-                        if (origBox) {
+                        if (window) {
+                            // Remember original size
+                            auto origPos = window->m_realPosition->goal();
+                            auto origSize = window->m_realSize->goal();
                             g_windowSnapper->rememberWindow(
                                 g_dragState.draggedWindow,
                                 layout->name,
                                 g_dragState.selectedZones,
-                                origBox->x, origBox->y,
-                                origBox->w, origBox->h);
+                                origPos.x, origPos.y,
+                                origSize.x, origSize.y);
+
+                            // Move and resize window to zone
+                            window->m_realPosition->setValueAndWarp(Vector2D(x, y));
+                            window->m_realSize->setValueAndWarp(Vector2D(w, h));
+
+                            // Update window internals
+                            g_pCompositor->changeWindowZOrder(window, true);
                         }
-
-                        // Move and resize window to zone
-                        // Use dispatcher for proper animation
-                        std::string moveArg = "exact " +
-                            std::to_string(static_cast<int>(x)) + " " +
-                            std::to_string(static_cast<int>(y));
-                        std::string sizeArg = "exact " +
-                            std::to_string(static_cast<int>(w)) + " " +
-                            std::to_string(static_cast<int>(h));
-
-                        g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
-                        g_pKeybindManager->m_dispatchers["resizewindowpixel"](sizeArg);
                     }
                 }
+            }
+
+            // Request final damage and hide
+            auto monitor = g_pCompositor->getMonitorFromCursor();
+            if (monitor) {
+                g_pHyprRenderer->damageMonitor(monitor);
             }
         }
 
