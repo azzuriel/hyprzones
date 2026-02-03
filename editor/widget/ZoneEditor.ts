@@ -719,7 +719,7 @@ function refreshLayoutList() {
     // Clear existing rows
     layoutListBox.foreach((child: Gtk.Widget) => layoutListBox!.remove(child))
 
-    // Get all mapped layout names
+    // Get all mapped layout names (layouts used in any mapping)
     const mappings = loadAllMappings()
     const mappedLayoutNames = new Set(mappings.map(m => m.layout))
 
@@ -729,7 +729,7 @@ function refreshLayoutList() {
         const row = new Gtk.ListBoxRow()
         const rowBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
 
-        // Green checkmark for layouts that are mapped (in use)
+        // Green checkmark = layout is used in at least one mapping
         if (mappedLayoutNames.has(name)) {
             const checkLabel = new Gtk.Label({ label: "✓" })
             checkLabel.get_style_context().add_class("active-layout-check")
