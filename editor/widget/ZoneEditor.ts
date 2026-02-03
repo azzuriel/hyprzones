@@ -519,32 +519,61 @@ function createLayoutPanel(): Gtk.Box {
     let selectedOldName: string | null = null
     layoutListBox.connect("row-selected", (_: Gtk.ListBox, row: Gtk.ListBoxRow | null) => {
         if (row && layoutNameEntry) {
-            const label = row.get_child() as Gtk.Label
-            selectedOldName = label.get_label()
+            // Row contains Box -> [activeIndicator, mappedIndicator, rowLabel]
+            const rowBox = row.get_child() as Gtk.Box
+            const children = rowBox.get_children()
+            const rowLabel = children[2] as Gtk.Label  // Third child is the name label
+            selectedOldName = rowLabel.get_label()
             layoutNameEntry.set_text(selectedOldName)
         }
     })
 
     const loadBtn = new Gtk.Button({ label: "Load" })
     loadBtn.get_style_context().add_class("toolbar-button")
-    loadBtn.connect("clicked", () => {
-        if (!layoutNameEntry) return
-        const name = layoutNameEntry.get_text()
-        if (name) {
-            const loaded = loadLayoutByName(name)
-            if (loaded) {
-                currentLayout = loaded
-                originalLayout = cloneLayout(loaded)
-                hasChanges = false
-                updateZoneDisplay()
-                hideLayoutPanel()
-            }
-        }
-    })
 
     const saveBtn = new Gtk.Button({ label: "Save" })
     saveBtn.get_style_context().add_class("toolbar-button")
     saveBtn.get_style_context().add_class("toolbar-save")
+
+    const renameBtn = new Gtk.Button({ label: "Rename" })
+    renameBtn.get_style_context().add_class("toolbar-button")
+
+    const deleteBtn = new Gtk.Button({ label: "Delete" })
+    deleteBtn.get_style_context().add_class("toolbar-button")
+    deleteBtn.get_style_context().add_class("toolbar-reset")
+
+    // Update button states based on selection
+    const updateLayoutButtonStates = () => {
+        const name = layoutNameEntry?.get_text() || ""
+        const layoutNames = getLayoutNames()
+        const layoutExists = layoutNames.includes(name)
+        const hasName = name.length > 0
+        const nameChanged = selectedOldName !== null && name !== selectedOldName
+
+        loadBtn.set_sensitive(layoutExists)
+        saveBtn.set_sensitive(hasName)
+        renameBtn.set_sensitive(selectedOldName !== null && nameChanged && hasName)
+        deleteBtn.set_sensitive(layoutExists)
+    }
+
+    // Update on name entry change
+    layoutNameEntry.connect("changed", updateLayoutButtonStates)
+
+    loadBtn.connect("clicked", () => {
+        if (!layoutNameEntry) return
+        const name = layoutNameEntry.get_text()
+        if (!name) return
+        const loaded = loadLayoutByName(name)
+        if (loaded) {
+            currentLayout = loaded
+            originalLayout = cloneLayout(loaded)
+            hasChanges = false
+            updateZoneDisplay()
+            refreshLayoutList()
+            updateLayoutButtonStates()
+        }
+    })
+
     saveBtn.connect("clicked", async () => {
         if (!layoutNameEntry) return
         const name = layoutNameEntry.get_text()
@@ -557,12 +586,11 @@ function createLayoutPanel(): Gtk.Box {
                 originalLayout = cloneLayout(currentLayout)
                 refreshLayoutList()
                 updateZoneDisplay()
+                updateLayoutButtonStates()
             }
         }
     })
 
-    const renameBtn = new Gtk.Button({ label: "Rename" })
-    renameBtn.get_style_context().add_class("toolbar-button")
     renameBtn.connect("clicked", async () => {
         if (!layoutNameEntry || !selectedOldName) return
         const newName = layoutNameEntry.get_text()
@@ -579,13 +607,11 @@ function createLayoutPanel(): Gtk.Box {
                 refreshLayoutList()
                 refreshMappingsList()
                 selectedOldName = newName
+                updateLayoutButtonStates()
             }
         }
     })
 
-    const deleteBtn = new Gtk.Button({ label: "Delete" })
-    deleteBtn.get_style_context().add_class("toolbar-button")
-    deleteBtn.get_style_context().add_class("toolbar-reset")
     deleteBtn.connect("clicked", async () => {
         if (!layoutNameEntry) return
         const name = layoutNameEntry.get_text()
@@ -596,8 +622,12 @@ function createLayoutPanel(): Gtk.Box {
             refreshLayoutList()
             layoutNameEntry.set_text("")
             selectedOldName = null
+            updateLayoutButtonStates()
         }
     })
+
+    // Initial state
+    updateLayoutButtonStates()
 
     layoutButtonBox.pack_start(loadBtn, false, false, 0)
     layoutButtonBox.pack_start(saveBtn, false, false, 0)
@@ -661,19 +691,75 @@ function createLayoutPanel(): Gtk.Box {
     const addMappingBtn = new Gtk.Button({ label: "+" })
     addMappingBtn.get_style_context().add_class("toolbar-button")
     addMappingBtn.get_style_context().add_class("toolbar-save")
+
+    // Function to check if current mapping selection is valid
+    const updateAddButtonState = () => {
+        const monitor = monitorCombo.get_active_id() || "*"
+        const workspaces = wsEntry.get_text() || "*"
+        const mappings = loadAllMappings()
+
+        let canAdd = true
+
+        // Check for exact duplicate (same monitor + same workspaces)
+        const isDuplicate = mappings.some(m =>
+            m.monitor === monitor && m.workspaces === workspaces
+        )
+        // Duplicates are allowed - they replace the existing mapping
+        // So we don't block duplicates
+
+        // Block if a global wildcard (* + *) already exists
+        const hasGlobalWildcard = mappings.some(m =>
+            m.monitor === "*" && m.workspaces === "*"
+        )
+        if (hasGlobalWildcard) {
+            canAdd = false
+        }
+
+        // Block (* + *) if any mappings exist
+        if (canAdd && monitor === "*" && workspaces === "*" && mappings.length > 0) {
+            canAdd = false
+        }
+
+        // Block (monitor + *) if mappings for this monitor already exist
+        if (canAdd && workspaces === "*") {
+            const hasMonitorMappings = mappings.some(m =>
+                m.monitor === monitor || (monitor !== "*" && m.monitor === "*")
+            )
+            if (hasMonitorMappings) {
+                canAdd = false
+            }
+        }
+
+        // Block if covered by (this monitor + *) wildcard
+        if (canAdd && workspaces !== "*") {
+            const coveredByMonitorWildcard = mappings.some(m =>
+                m.monitor === monitor && m.workspaces === "*"
+            )
+            if (coveredByMonitorWildcard) {
+                canAdd = false
+            }
+        }
+
+        addMappingBtn.set_sensitive(canAdd)
+    }
+
+    // Update button state when inputs change
+    monitorCombo.connect("changed", updateAddButtonState)
+    wsEntry.connect("changed", updateAddButtonState)
+
     addMappingBtn.connect("clicked", async () => {
         const monitor = monitorCombo.get_active_id() || "*"
         const workspaces = wsEntry.get_text() || "*"
         const layout = layoutCombo.get_active_id()
         if (layout) {
-            // Check for existing mapping with same monitor/workspace
             const mappings = loadAllMappings()
+
+            // Exact duplicate - replace the layout
             const existingIndex = mappings.findIndex(m =>
                 m.monitor === monitor && m.workspaces === workspaces
             )
 
             if (existingIndex >= 0) {
-                // Replace existing mapping
                 mappings[existingIndex].layout = layout
                 saveMappings(mappings)
             } else {
@@ -682,6 +768,7 @@ function createLayoutPanel(): Gtk.Box {
             await reloadConfig()
             refreshMappingsList()
             refreshLayoutList()
+            updateAddButtonState()
         }
     })
 
@@ -713,6 +800,9 @@ function createLayoutPanel(): Gtk.Box {
     // Store layoutCombo ref for refresh
     layoutComboRef = layoutCombo
 
+    // Initial button state check
+    updateAddButtonState()
+
     return panel
 }
 
@@ -724,9 +814,7 @@ function refreshLayoutList() {
 
     // Get all mapped layout names (layouts used in any mapping)
     const mappings = loadAllMappings()
-    console.log('refreshLayoutList: mappings =', JSON.stringify(mappings))
     const mappedLayoutNames = new Set(mappings.map(m => m.layout))
-    console.log('refreshLayoutList: mappedLayoutNames =', [...mappedLayoutNames])
 
     // Add layouts
     const layoutNames = getLayoutNames()
@@ -734,18 +822,27 @@ function refreshLayoutList() {
         const row = new Gtk.ListBoxRow()
         const rowBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
 
+        // Orange arrow = currently loaded in editor (matches zone tile color)
+        const isActive = name === currentLayout.name
+        const activeIndicator = new Gtk.Label()
+        activeIndicator.set_use_markup(true)
+        activeIndicator.set_label(isActive
+            ? '<span foreground="#cc8844">▶</span>'
+            : '<span foreground="#333333">▷</span>')
+        activeIndicator.set_width_chars(2)
+        activeIndicator.set_xalign(0.5)
+        rowBox.pack_start(activeIndicator, false, false, 0)
+
         // Green/gray dot = layout is/isn't used in mappings
         const isMapped = mappedLayoutNames.has(name)
-        const indicator = new Gtk.Label()
-        indicator.set_use_markup(true)
-        if (isMapped) {
-            indicator.set_label('<span foreground="#00ff00" size="large">●</span>')
-        } else {
-            indicator.set_label('<span foreground="#555555" size="large">○</span>')
-        }
-        indicator.set_margin_start(8)
-        indicator.set_margin_end(4)
-        rowBox.pack_start(indicator, false, false, 0)
+        const mappedIndicator = new Gtk.Label()
+        mappedIndicator.set_use_markup(true)
+        mappedIndicator.set_label(isMapped
+            ? '<span foreground="#00ff00">●</span>'
+            : '<span foreground="#555555">○</span>')
+        mappedIndicator.set_width_chars(2)
+        mappedIndicator.set_xalign(0.5)
+        rowBox.pack_start(mappedIndicator, false, false, 0)
 
         const rowLabel = new Gtk.Label({ label: name })
         rowLabel.set_halign(Gtk.Align.START)
@@ -968,12 +1065,6 @@ function createToolbar(): Gtk.Box {
     resetBtn.get_style_context().add_class("toolbar-reset")
     resetBtn.connect("clicked", handleReset)
 
-    // Cancel button
-    const cancelBtn = new Gtk.Button({ label: "Cancel" })
-    cancelBtn.get_style_context().add_class("toolbar-button")
-    cancelBtn.get_style_context().add_class("toolbar-cancel")
-    cancelBtn.connect("clicked", handleCancel)
-
     // Config button - opens layout management dialog
     const configBtn = new Gtk.Button({ label: "Config" })
     configBtn.get_style_context().add_class("toolbar-button")
@@ -981,7 +1072,6 @@ function createToolbar(): Gtk.Box {
     configBtn.connect("clicked", showLayoutPanel)
 
     toolbar.pack_start(resetBtn, false, false, 0)
-    toolbar.pack_start(cancelBtn, false, false, 0)
     toolbar.pack_start(configBtn, false, false, 0)
 
     return toolbar

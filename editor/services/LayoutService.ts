@@ -81,14 +81,11 @@ export function loadAllMappings(): LayoutMapping[] {
         const [ok, contents] = GLib.file_get_contents(CONFIG_PATH);
         if (ok && contents) {
             const content = new TextDecoder().decode(contents);
-            const mappings = parseAllTomlMappings(content);
-            console.log('loadAllMappings: found', mappings.length, 'mappings:', JSON.stringify(mappings));
-            return mappings;
+            return parseAllTomlMappings(content);
         }
     } catch (e) {
         console.error('Failed to load mappings:', e);
     }
-    console.log('loadAllMappings: returning empty array');
     return [];
 }
 
@@ -233,7 +230,7 @@ function parseAllTomlLayouts(content: string): Layout[] {
 // Snaps shared boundaries to identical values
 function normalizeLayout(layout: Layout): Layout {
     const zones = layout.zones.map(z => ({ ...z }))
-    const SNAP_THRESHOLD = 0.005 // 0.5% tolerance for snapping
+    const SNAP_THRESHOLD = 0.02 // 2% tolerance for snapping gaps
 
     // Collect all unique boundary positions
     const xBoundaries: number[] = []
@@ -285,6 +282,20 @@ function normalizeLayout(layout: Layout): Layout {
 
         zone.width = newRight - zone.x
         zone.height = newBottom - zone.y
+    }
+
+    // Snap edges to 0 or 1 if close
+    const EDGE_THRESHOLD = 0.02
+    for (const zone of zones) {
+        // Snap to left/top edge
+        if (zone.x < EDGE_THRESHOLD) zone.x = 0
+        if (zone.y < EDGE_THRESHOLD) zone.y = 0
+
+        // Snap to right/bottom edge
+        const right = zone.x + zone.width
+        const bottom = zone.y + zone.height
+        if (right > 1 - EDGE_THRESHOLD) zone.width = 1 - zone.x
+        if (bottom > 1 - EDGE_THRESHOLD) zone.height = 1 - zone.y
     }
 
     // Round to integer percentages for clean config

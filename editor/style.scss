@@ -200,6 +200,13 @@ $backdrop: rgba(0, 0, 0, 0.85);
         background: $accent-hover;
         border-color: $accent-hover;
     }
+
+    &:disabled {
+        background: $surface-4;
+        border-color: $border-primary;
+        color: $text-muted;
+        opacity: 0.4;
+    }
 }
 
 .toolbar-cancel {
@@ -217,6 +224,13 @@ $backdrop: rgba(0, 0, 0, 0.85);
     &:hover {
         background: rgba(138, 74, 74, 0.4);
         border-color: rgba(138, 74, 74, 0.6);
+    }
+
+    &:disabled {
+        background: $surface-4;
+        border-color: $border-primary;
+        color: $text-muted;
+        opacity: 0.4;
     }
 }
 
