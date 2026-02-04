@@ -79,9 +79,9 @@ hyprpm reload
 
 | Package | Arch Linux | Description |
 |---------|------------|-------------|
-| AGS v3 | `aylurs-gtk-shell` (AUR) | GTK shell framework |
-| GTK3 | `gtk3` | GUI toolkit |
-| GtkLayerShell | `gtk-layer-shell` | Wayland layer shell |
+| AGS v3 | `aylurs-gtk-shell` (AUR) | GTK4 shell framework |
+| GTK4 | `gtk4` | GUI toolkit |
+| Gtk4LayerShell | `gtk4-layer-shell` | Wayland layer shell for GTK4 |
 
 #### Arch Linux
 
@@ -90,7 +90,7 @@ hyprpm reload
 sudo pacman -S hyprland cmake gcc pkgconf pango cairo libdrm
 
 # Editor dependencies
-sudo pacman -S gtk3 gtk-layer-shell
+sudo pacman -S gtk4 gtk4-layer-shell
 paru -S aylurs-gtk-shell
 ```
 
@@ -337,11 +337,11 @@ hyprzones/
 
 ### Editor doesn't open
 
-The editor requires AGS v3 and GTK Layer Shell:
+The editor requires AGS v3 and GTK4 Layer Shell:
 
 ```bash
 # Arch Linux
-sudo pacman -S gtk3 gtk-layer-shell
+sudo pacman -S gtk4 gtk4-layer-shell
 paru -S aylurs-gtk-shell
 ```
 
