@@ -4,6 +4,18 @@
 
 A Hyprland plugin for **declarative zone-based window tiling**, inspired by Microsoft PowerToys FancyZones.
 
+<p align="center">
+  <img src="docs/screenshots/azz-hyprzones-overlay.png" alt="HyprZones Overlay" width="100%">
+  <br>
+  <em>Zone overlay showing available snap targets while dragging a window</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/azz-hyprzones-editor.png" alt="HyprZones Editor" width="100%">
+  <br>
+  <em>Visual zone editor with layout and mapping management</em>
+</p>
+
 ## Overview
 
 Unlike traditional tiling window managers that build layouts imperatively, HyprZones uses **declarative zone definitions**. You define where zones are, and windows snap to them.
