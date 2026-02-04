@@ -3,6 +3,7 @@
 #include "hyprzones/LayoutManager.hpp"
 #include <fstream>
 #include <cstdlib>
+#include <iostream>
 
 namespace HyprZones {
 
@@ -44,6 +45,14 @@ void reloadConfig() {
     g_config.layoutIndex.clear();
     for (size_t i = 0; i < g_config.layouts.size(); ++i) {
         g_config.layoutIndex[g_config.layouts[i].name] = i;
+    }
+
+    // Debug: Log loaded mappings
+    std::cerr << "[HyprZones] Config reloaded: " << g_config.layouts.size()
+              << " layouts, " << g_config.mappings.size() << " mappings\n";
+    for (const auto& m : g_config.mappings) {
+        std::cerr << "[HyprZones]   Mapping: monitor=" << m.monitor
+                  << " ws=" << m.workspaces << " -> layout=" << m.layout << "\n";
     }
 }
 

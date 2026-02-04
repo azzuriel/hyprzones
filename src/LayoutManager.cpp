@@ -1,5 +1,6 @@
 #include "hyprzones/LayoutManager.hpp"
 #include <fstream>
+#include <iostream>
 
 namespace HyprZones {
 
@@ -131,6 +132,9 @@ Layout* LayoutManager::getLayoutForMonitor(Config& config,
         if (monitorMatch && wsMatch) {
             auto it = config.layoutIndex.find(mapping.layout);
             if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
+                std::cerr << "[HyprZones] getLayoutForMonitor: mon=" << monitorName
+                          << " ws=" << workspace << " -> matched mapping -> layout="
+                          << mapping.layout << "\n";
                 return &config.layouts[it->second];
             }
         }
@@ -140,12 +144,18 @@ Layout* LayoutManager::getLayoutForMonitor(Config& config,
     if (!config.activeLayout.empty()) {
         auto it = config.layoutIndex.find(config.activeLayout);
         if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
+            std::cerr << "[HyprZones] getLayoutForMonitor: mon=" << monitorName
+                      << " ws=" << workspace << " -> no mapping, using active="
+                      << config.activeLayout << "\n";
             return &config.layouts[it->second];
         }
     }
 
     // Last resort: first layout
     if (!config.layouts.empty()) {
+        std::cerr << "[HyprZones] getLayoutForMonitor: mon=" << monitorName
+                  << " ws=" << workspace << " -> fallback to first layout="
+                  << config.layouts[0].name << "\n";
         return &config.layouts[0];
     }
 
