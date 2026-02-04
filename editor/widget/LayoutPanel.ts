@@ -511,11 +511,15 @@ export function refreshLayoutList() {
 
     removeAllChildren(state.layoutFlowBox)
 
-    const layoutNames = getLayoutNames()
-    const activeLayout = state.currentLayout.name
+    // Get all mapped layout names (layouts used in any mapping)
+    const mappings = loadAllMappings()
+    const mappedLayoutNames = new Set(mappings.map(m => m.layout))
 
+    const layoutNames = getLayoutNames()
     for (const name of layoutNames) {
-        const motionController = new Gtk.EventControllerMotion()
+        // Box for hover detection (replaces EventBox)
+        const hoverBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL })
+
         const card = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 4 })
         card.get_style_context().add_class("layout-card")
         card.set_margin_start(4)
@@ -523,42 +527,55 @@ export function refreshLayoutList() {
         card.set_margin_top(4)
         card.set_margin_bottom(4)
 
-        motionController.connect("enter", () => { card.get_style_context().add_class("hover") })
-        motionController.connect("leave", () => { card.get_style_context().remove_class("hover") })
+        // Hover effects with EventControllerMotion
+        const motionController = new Gtk.EventControllerMotion()
+        motionController.connect("enter", () => {
+            card.get_style_context().add_class("hover")
+        })
+        motionController.connect("leave", () => {
+            card.get_style_context().remove_class("hover")
+        })
+        hoverBox.add_controller(motionController)
+
+        // Status indicators with proper spacing
+        const isActive = name === state.currentLayout.name
+        const isMapped = mappedLayoutNames.has(name)
+
+        // Active indicator (filled/outline arrow)
+        const activeIndicator = new Gtk.Label()
+        activeIndicator.set_use_markup(true)
+        activeIndicator.set_label(isActive
+            ? '<span foreground="#cc8844">▶</span>'
+            : '<span foreground="#555555">▷</span>')
+        activeIndicator.set_margin_end(6)
+
+        // Mapped indicator (filled/outline circle)
+        const mappedIndicator = new Gtk.Label()
+        mappedIndicator.set_use_markup(true)
+        mappedIndicator.set_label(isMapped
+            ? '<span foreground="#00ff00">●</span>'
+            : '<span foreground="#555555">○</span>')
+        mappedIndicator.set_margin_end(8)
 
         const label = new Gtk.Label({ label: name })
-        label.set_use_markup(true)
         label.set_margin_top(6)
         label.set_margin_bottom(6)
-        label.set_margin_start(8)
         label.set_margin_end(8)
+
+        card.append(activeIndicator)
+        card.append(mappedIndicator)
         card.append(label)
 
-        // Status indicators
-        const isActive = name === activeLayout
-        const mappings = loadAllMappings()
-        const mappingCount = mappings.filter(m => m.layout === name).length
+        hoverBox.append(card)
 
-        if (isActive) {
-            const activeLabel = new Gtk.Label({ label: "●" })
-            activeLabel.set_tooltip_text("Active")
-            activeLabel.get_style_context().add_class("status-active")
-            card.append(activeLabel)
-        }
-        if (mappingCount > 0) {
-            const mappingLabel = new Gtk.Label({ label: `(${mappingCount})` })
-            mappingLabel.set_tooltip_text(`${mappingCount} mapping(s)`)
-            mappingLabel.get_style_context().add_class("status-mapped")
-            card.append(mappingLabel)
-        }
-
+        // Store name for selection and filtering
         const child = new Gtk.FlowBoxChild()
         child.set_name(name)
-        child.set_child(card)
-        child.add_controller(motionController)
+        child.set_child(hoverBox)
         state.layoutFlowBox.append(child)
     }
 
+    // Update layout dropdown in add mapping row
     populateMappingLayoutDropdown()
 }
 

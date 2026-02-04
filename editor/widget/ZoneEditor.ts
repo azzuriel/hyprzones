@@ -199,7 +199,6 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
     setZoneOpsUpdateCallback(updateZoneDisplay)
     setToolbarCallbacks({
         showLayoutPanel,
-        closeEditor: () => state.editorWindow?.hide(),
         updateDisplay: updateZoneDisplay
     })
     setLayoutPanelCallbacks({
