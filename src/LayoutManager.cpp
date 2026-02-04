@@ -1,6 +1,11 @@
 #include "hyprzones/LayoutManager.hpp"
 #include <fstream>
-#include <iostream>
+
+// Debug log to file
+static void logToFile(const std::string& msg) {
+    std::ofstream f("/tmp/hyprzones.log", std::ios::app);
+    if (f) f << msg << "\n";
+}
 
 namespace HyprZones {
 
@@ -132,9 +137,9 @@ Layout* LayoutManager::getLayoutForMonitor(Config& config,
         if (monitorMatch && wsMatch) {
             auto it = config.layoutIndex.find(mapping.layout);
             if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
-                std::cerr << "[HyprZones] getLayoutForMonitor: mon=" << monitorName
-                          << " ws=" << workspace << " -> matched mapping -> layout="
-                          << mapping.layout << "\n";
+                logToFile("[HyprZones] getLayoutForMonitor: mon=" + monitorName +
+                          " ws=" + std::to_string(workspace) + " -> matched mapping -> layout=" +
+                          mapping.layout);
                 return &config.layouts[it->second];
             }
         }
@@ -144,18 +149,18 @@ Layout* LayoutManager::getLayoutForMonitor(Config& config,
     if (!config.activeLayout.empty()) {
         auto it = config.layoutIndex.find(config.activeLayout);
         if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
-            std::cerr << "[HyprZones] getLayoutForMonitor: mon=" << monitorName
-                      << " ws=" << workspace << " -> no mapping, using active="
-                      << config.activeLayout << "\n";
+            logToFile("[HyprZones] getLayoutForMonitor: mon=" + monitorName +
+                      " ws=" + std::to_string(workspace) + " -> no mapping, using active=" +
+                      config.activeLayout);
             return &config.layouts[it->second];
         }
     }
 
     // Last resort: first layout
     if (!config.layouts.empty()) {
-        std::cerr << "[HyprZones] getLayoutForMonitor: mon=" << monitorName
-                  << " ws=" << workspace << " -> fallback to first layout="
-                  << config.layouts[0].name << "\n";
+        logToFile("[HyprZones] getLayoutForMonitor: mon=" + monitorName +
+                  " ws=" + std::to_string(workspace) + " -> fallback to first layout=" +
+                  config.layouts[0].name);
         return &config.layouts[0];
     }
 

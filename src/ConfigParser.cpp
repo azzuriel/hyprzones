@@ -3,7 +3,12 @@
 #include "hyprzones/LayoutManager.hpp"
 #include <fstream>
 #include <cstdlib>
-#include <iostream>
+
+// Debug log to file
+static void logToFile(const std::string& msg) {
+    std::ofstream f("/tmp/hyprzones.log", std::ios::app);
+    if (f) f << msg << "\n";
+}
 
 namespace HyprZones {
 
@@ -48,11 +53,11 @@ void reloadConfig() {
     }
 
     // Debug: Log loaded mappings
-    std::cerr << "[HyprZones] Config reloaded: " << g_config.layouts.size()
-              << " layouts, " << g_config.mappings.size() << " mappings\n";
+    logToFile("[HyprZones] Config reloaded: " + std::to_string(g_config.layouts.size()) +
+              " layouts, " + std::to_string(g_config.mappings.size()) + " mappings");
     for (const auto& m : g_config.mappings) {
-        std::cerr << "[HyprZones]   Mapping: monitor=" << m.monitor
-                  << " ws=" << m.workspaces << " -> layout=" << m.layout << "\n";
+        logToFile("[HyprZones]   Mapping: monitor=" + m.monitor +
+                  " ws=" + m.workspaces + " -> layout=" + m.layout);
     }
 }
 
