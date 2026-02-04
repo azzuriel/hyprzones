@@ -33,7 +33,7 @@ export const DEFAULT_LAYOUT: Layout = {
 
 // Constants
 export const WINDOW_NAME = "hyprzones-editor"
-export const SPLITTER_THICKNESS = 4
+export const SPLITTER_THICKNESS = 3
 
 // Screen margins (waybar + gaps) - fixed offsets for ALL monitors
 export const MARGIN_TOP = 97
