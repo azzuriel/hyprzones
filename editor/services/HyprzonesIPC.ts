@@ -15,7 +15,7 @@ export async function getLayouts(): Promise<string[]> {
 
 export async function reloadConfig(): Promise<boolean> {
     try {
-        await execAsync(['hyprctl', 'dispatch', 'hyprzones:reload']);
+        await execAsync(['hyprctl', 'hyprzones:reload']);
         return true;
     } catch (e) {
         console.error('Failed to reload config:', e);
