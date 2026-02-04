@@ -1,8 +1,8 @@
 // ZoneEditor - Main zone editor widget using GTK layer shell
-// AGS v3 imperative GTK style with bounded splitter segments
+// AGS v3 imperative GTK4 style with bounded splitter segments
 
-import { Gtk, Gdk } from "ags/gtk3"
-import GtkLayerShell from "gi://GtkLayerShell"
+import { Gtk, Gdk } from "ags/gtk4"
+import Gtk4LayerShell from "gi://Gtk4LayerShell"
 import { execAsync } from "ags/process"
 import GLib from "gi://GLib"
 import { Layout, Zone, LayoutMapping, cloneLayout, getSplitterSegments, SplitterSegment } from "../models/Layout"
@@ -11,7 +11,7 @@ import { loadLayoutFromConfig, loadLayoutByName, saveLayoutToConfig, getLayoutNa
 import { reloadConfig } from "../services/HyprzonesIPC"
 
 const WINDOW_NAME = "hyprzones-editor"
-const SPLITTER_THICKNESS = 12
+const SPLITTER_THICKNESS = 4
 
 // Default layout if none exists
 const DEFAULT_LAYOUT: Layout = {
@@ -52,11 +52,14 @@ let fullScreenHeight = 1080
 
 // Drag state - global for window-level event handling
 let activeDragSegment: SplitterSegment | null = null
-let activeDragWidget: Gtk.EventBox | null = null
-let dragStartPos = 0
+let activeDragWidget: Gtk.Box | null = null
+let dragStartMousePos = 0  // Mouse position when drag started (window coords)
+let dragStartSplitterPos = 0  // Splitter position when drag started (percentage)
 // Zones captured at drag start - these don't change during drag
 let dragLeftZones: number[] = []
 let dragRightZones: number[] = []
+// Original zone sizes at drag start - for absolute positioning
+let dragOriginalSizes: Map<number, number> = new Map()
 // Usable size captured at drag start - prevents spacing drift
 let dragUsableSize = 0
 
@@ -87,12 +90,28 @@ export async function reloadCurrentLayout(): Promise<void> {
     }
 }
 
+// GTK4 helper: remove all children from a container
+function removeAllChildren(container: Gtk.Widget) {
+    let child = container.get_first_child()
+    while (child) {
+        const next = child.get_next_sibling()
+        if (container instanceof Gtk.Fixed) {
+            (container as Gtk.Fixed).remove(child)
+        } else if (container instanceof Gtk.FlowBox) {
+            (container as Gtk.FlowBox).remove(child)
+        } else if (container instanceof Gtk.Box) {
+            (container as Gtk.Box).remove(child)
+        }
+        child = next
+    }
+}
+
 // Update zone positions in the container
 function updateZoneDisplay() {
     if (!zoneContainer) return
 
     // Note: layoutPanel is now in mainOverlay, not zoneContainer, so don't reset it here
-    zoneContainer.get_children().forEach(child => child.destroy())
+    removeAllChildren(zoneContainer)
 
     const gridBounds = collectGridBoundaries(currentLayout.zones)
 
@@ -112,19 +131,19 @@ function updateZoneDisplay() {
         const splitter = createSplitterWidget(pixelSplitter)
         zoneContainer.put(splitter, monitor.x + pixelSplitter.x, topOffset + pixelSplitter.y)
     }
-
-    zoneContainer.show_all()
 }
 
 // Create a zone rectangle widget with split buttons
-function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
-    const eventBox = new Gtk.EventBox()
-    eventBox.set_size_request(rect.width, rect.height)
+function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.Box {
+    const container = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL })
+    container.set_size_request(rect.width, rect.height)
 
     const frame = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL })
     frame.get_style_context().add_class("zone")
     frame.set_halign(Gtk.Align.FILL)
     frame.set_valign(Gtk.Align.FILL)
+    frame.set_hexpand(true)
+    frame.set_vexpand(true)
 
     // Zone label
     const label = new Gtk.Label({ label: zone.name })
@@ -153,7 +172,7 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
         splitVBtn.get_style_context().add_class("zone-split-btn")
         splitVBtn.set_tooltip_text("Split vertically")
         splitVBtn.connect("clicked", () => splitZone(zone, 'vertical'))
-        buttonBox.pack_start(splitVBtn, false, false, 0)
+        buttonBox.append(splitVBtn)
     }
 
     // Horizontal split button (split top/bottom) - only show if possible
@@ -163,7 +182,7 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
         splitHBtn.get_style_context().add_class("zone-split-btn")
         splitHBtn.set_tooltip_text("Split horizontally")
         splitHBtn.connect("clicked", () => splitZone(zone, 'horizontal'))
-        buttonBox.pack_start(splitHBtn, false, false, 0)
+        buttonBox.append(splitHBtn)
     }
 
     // Merge button - only show if there's a mergeable neighbor
@@ -175,7 +194,7 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
         mergeBtn.get_style_context().add_class("zone-merge-btn")
         mergeBtn.set_tooltip_text("Merge with neighbor")
         mergeBtn.connect("clicked", () => mergeZones(zone, mergeTarget))
-        buttonBox.pack_start(mergeBtn, false, false, 0)
+        buttonBox.append(mergeBtn)
     }
 
     // Center content
@@ -184,13 +203,13 @@ function createZoneWidget(zone: Zone, rect: PixelRect): Gtk.EventBox {
     centerBox.set_valign(Gtk.Align.CENTER)
     centerBox.set_hexpand(true)
     centerBox.set_vexpand(true)
-    centerBox.pack_start(label, false, false, 0)
-    centerBox.pack_start(buttonBox, false, false, 0)
+    centerBox.append(label)
+    centerBox.append(buttonBox)
 
-    frame.pack_start(centerBox, true, true, 0)
-    eventBox.add(frame)
+    frame.append(centerBox)
+    container.append(frame)
 
-    return eventBox
+    return container
 }
 
 // Zone in zwei Teile splitten
@@ -291,85 +310,81 @@ function mergeZones(zone: Zone, neighbor: Zone) {
 }
 
 // Create a bounded splitter widget for resizing
-function createSplitterWidget(pixelSplitter: PixelSplitter): Gtk.EventBox {
-    const eventBox = new Gtk.EventBox()
+function createSplitterWidget(pixelSplitter: PixelSplitter): Gtk.Box {
+    const splitterBox = new Gtk.Box({})
     const segment = pixelSplitter.segment
 
-    eventBox.set_size_request(pixelSplitter.width, pixelSplitter.height)
-    eventBox.set_visible_window(true)
-    eventBox.set_above_child(false)
-    eventBox.get_style_context().add_class("splitter")
+    splitterBox.set_size_request(pixelSplitter.width, pixelSplitter.height)
+    splitterBox.get_style_context().add_class("splitter")
 
     if (segment.orientation === 'vertical') {
-        eventBox.get_style_context().add_class("splitter-vertical")
+        splitterBox.get_style_context().add_class("splitter-vertical")
     } else {
-        eventBox.get_style_context().add_class("splitter-horizontal")
+        splitterBox.get_style_context().add_class("splitter-horizontal")
     }
 
     const handle = new Gtk.Box({})
     handle.get_style_context().add_class("splitter-handle")
     if (segment.orientation === 'vertical') {
-        handle.set_size_request(4, pixelSplitter.height)
+        handle.set_size_request(2, pixelSplitter.height)
     } else {
-        handle.set_size_request(pixelSplitter.width, 4)
+        handle.set_size_request(pixelSplitter.width, 2)
     }
     handle.set_halign(Gtk.Align.CENTER)
     handle.set_valign(Gtk.Align.CENTER)
-    eventBox.add(handle)
-
-    // Enable events
-    eventBox.set_events(
-        Gdk.EventMask.BUTTON_PRESS_MASK |
-        Gdk.EventMask.ENTER_NOTIFY_MASK |
-        Gdk.EventMask.LEAVE_NOTIFY_MASK
-    )
+    splitterBox.append(handle)
 
     // Get cursor types for resize
-    const display = Gdk.Display.get_default()
     const resizeCursor = segment.orientation === 'vertical'
-        ? Gdk.Cursor.new_from_name(display, "col-resize")
-        : Gdk.Cursor.new_from_name(display, "row-resize")
-    const defaultCursor = Gdk.Cursor.new_from_name(display, "default")
+        ? Gdk.Cursor.new_from_name("col-resize", null)
+        : Gdk.Cursor.new_from_name("row-resize", null)
+    const defaultCursor = Gdk.Cursor.new_from_name("default", null)
 
-    // Cursor change on hover
-    eventBox.connect("enter-notify-event", () => {
+    // Cursor change on hover - GTK4 EventControllerMotion
+    const motionController = new Gtk.EventControllerMotion()
+    motionController.connect("enter", () => {
         if (!activeDragSegment) {
-            const win = eventBox.get_window()
-            if (win && resizeCursor) {
-                win.set_cursor(resizeCursor)
-            }
-            eventBox.get_style_context().add_class("hover")
+            splitterBox.set_cursor(resizeCursor)
+            splitterBox.get_style_context().add_class("hover")
         }
-        return false
     })
-
-    eventBox.connect("leave-notify-event", () => {
+    motionController.connect("leave", () => {
         if (!activeDragSegment) {
-            const win = eventBox.get_window()
-            if (win) {
-                win.set_cursor(defaultCursor)
-            }
-            eventBox.get_style_context().remove_class("hover")
+            splitterBox.set_cursor(defaultCursor)
+            splitterBox.get_style_context().remove_class("hover")
         }
-        return false
     })
+    splitterBox.add_controller(motionController)
 
     // Only handle button press - motion/release handled at window level
-    eventBox.connect("button-press-event", (_: Gtk.EventBox, event: Gdk.Event) => {
-        const [, button] = event.get_button()
-        if (button !== 1) return false
+    const clickGesture = new Gtk.GestureClick()
+    clickGesture.set_button(1)
+    clickGesture.connect("pressed", (_gesture: Gtk.GestureClick, _n_press: number, x: number, y: number) => {
+        // Get root coordinates
+        const native = splitterBox.get_native()
+        if (!native) return
 
-        const [, rootX, rootY] = event.get_root_coords()
+        // In GTK4, we need to translate coordinates
+        let rootX = x
+        let rootY = y
+        const surface = native.get_surface()
+        if (surface) {
+            const [wx, wy] = splitterBox.translate_coordinates(native as Gtk.Widget, x, y) || [x, y]
+            rootX = wx
+            rootY = wy
+        }
+
         activeDragSegment = segment
-        activeDragWidget = eventBox
-        dragStartPos = segment.orientation === 'vertical' ? rootX : rootY
-        eventBox.get_style_context().add_class("dragging")
+        activeDragWidget = splitterBox
+        dragStartMousePos = segment.orientation === 'vertical' ? rootX : rootY
+        splitterBox.get_style_context().add_class("dragging")
 
         // Capture connected zones NOW while positions are still unique
         const refZone = currentLayout.zones[segment.leftZones[0]]
         const linePos = segment.orientation === 'vertical'
             ? refZone.x + refZone.width
             : refZone.y + refZone.height
+        dragStartSplitterPos = linePos
 
         dragLeftZones = []
         dragRightZones = []
@@ -387,10 +402,17 @@ function createSplitterWidget(pixelSplitter: PixelSplitter): Gtk.EventBox {
         // Capture usable size at drag start - simple percentage-based
         dragUsableSize = segment.orientation === 'vertical' ? monitor.width : monitor.height
 
-        return true
+        // Capture original zone sizes for absolute positioning
+        dragOriginalSizes.clear()
+        for (const i of [...dragLeftZones, ...dragRightZones]) {
+            const zone = currentLayout.zones[i]
+            const size = segment.orientation === 'vertical' ? zone.width : zone.height
+            dragOriginalSizes.set(i, size)
+        }
     })
+    splitterBox.add_controller(clickGesture)
 
-    return eventBox
+    return splitterBox
 }
 
 // Finde Zonen die entlang einer Linie verbunden sind
@@ -500,52 +522,150 @@ function moveSplitterSegment(segment: SplitterSegment, delta: number) {
     updateZoneDisplay()
 }
 
+// Move splitter to absolute position based on delta from drag start
+function moveSplitterAbsolute(segment: SplitterSegment, totalDelta: number) {
+    const monitorSize = segment.orientation === 'vertical' ? monitor.width : monitor.height
+    const MIN_SIZE = 200 / monitorSize
+
+    // Calculate limits based on ORIGINAL sizes (not current)
+    let minDelta = -Infinity
+    let maxDelta = Infinity
+
+    for (const i of dragLeftZones) {
+        const originalSize = dragOriginalSizes.get(i) || 0
+        minDelta = Math.max(minDelta, MIN_SIZE - originalSize)
+    }
+
+    for (const i of dragRightZones) {
+        const originalSize = dragOriginalSizes.get(i) || 0
+        maxDelta = Math.min(maxDelta, originalSize - MIN_SIZE)
+    }
+
+    const clampedDelta = Math.max(minDelta, Math.min(maxDelta, totalDelta))
+
+    // Reset zones to original sizes and apply clamped delta
+    for (const i of dragLeftZones) {
+        const zone = currentLayout.zones[i]
+        const originalSize = dragOriginalSizes.get(i) || 0
+        if (segment.orientation === 'vertical') {
+            zone.width = originalSize + clampedDelta
+        } else {
+            zone.height = originalSize + clampedDelta
+        }
+    }
+
+    for (const i of dragRightZones) {
+        const zone = currentLayout.zones[i]
+        const originalSize = dragOriginalSizes.get(i) || 0
+        if (segment.orientation === 'vertical') {
+            zone.x = dragStartSplitterPos + clampedDelta
+            zone.width = originalSize - clampedDelta
+        } else {
+            zone.y = dragStartSplitterPos + clampedDelta
+            zone.height = originalSize - clampedDelta
+        }
+    }
+
+    hasChanges = true
+    updateZoneDisplay()
+}
 
 // Layout manager panel (embedded overlay, not separate window)
 let layoutPanel: Gtk.Box | null = null
 let layoutPanelOverlay: Gtk.Overlay | null = null
 let layoutNameEntry: Gtk.Entry | null = null
-let layoutListBox: Gtk.ListBox | null = null
-let mappingsListBox: Gtk.ListBox | null = null
-let layoutComboRef: Gtk.ComboBoxText | null = null
+let layoutFlowBox: Gtk.FlowBox | null = null
+let layoutSearchEntry: Gtk.SearchEntry | null = null
+let mappingsFlowBox: Gtk.FlowBox | null = null
+let mappingsSearchEntry: Gtk.SearchEntry | null = null
+let selectedOldName: string | null = null
+let selectedMappingLayout: string = ""
+let mappingLayoutButton: Gtk.Button | null = null
+let mappingLayoutDropdownList: Gtk.FlowBox | null = null
 
 function createLayoutPanel(): Gtk.Box {
-    const panel = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 12 })
+    const panel = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 16 })
     panel.get_style_context().add_class("layout-dialog")
-    panel.set_halign(Gtk.Align.CENTER)
-    panel.set_valign(Gtk.Align.CENTER)
+    // Max 40% width, 60% height of usable monitor area, centered
+    const panelWidth = Math.floor(monitor.width * 0.4)
+    const panelHeight = Math.floor(monitor.height * 0.6)
+    panel.set_size_request(panelWidth, panelHeight)
+    // Inner padding
+    panel.set_margin_start(24)
+    panel.set_margin_end(24)
+    panel.set_margin_top(20)
+    panel.set_margin_bottom(20)
+
+    // CRITICAL: Close button at top - always visible, always works
+    const headerRow = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL })
+    headerRow.set_halign(Gtk.Align.FILL)
+    const titleLabel = new Gtk.Label({ label: "Config" })
+    titleLabel.get_style_context().add_class("section-header")
+    titleLabel.set_hexpand(true)
+    titleLabel.set_halign(Gtk.Align.START)
+    const closeBtn = new Gtk.Button({ label: "✕ Close (ESC)" })
+    closeBtn.get_style_context().add_class("toolbar-button")
+    closeBtn.get_style_context().add_class("toolbar-reset")
+    closeBtn.connect("clicked", hideLayoutPanel)
+    headerRow.append(titleLabel)
+    headerRow.append(closeBtn)
+    panel.append(headerRow)
 
     // === LAYOUTS SECTION ===
     const layoutsHeader = new Gtk.Label({ label: "Layouts" })
     layoutsHeader.get_style_context().add_class("section-header")
     layoutsHeader.set_halign(Gtk.Align.START)
 
-    // Name entry
-    const nameBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
+    // Search + Name entry row
+    const topRow = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 16 })
+    topRow.set_halign(Gtk.Align.FILL)
+    layoutSearchEntry = new Gtk.SearchEntry()
+    layoutSearchEntry.set_placeholder_text("Filter...")
+    layoutSearchEntry.set_hexpand(true)
     const nameLabel = new Gtk.Label({ label: "Name:" })
-    nameLabel.set_width_chars(8)
+    nameLabel.set_margin_start(16)
     layoutNameEntry = new Gtk.Entry()
-    layoutNameEntry.set_width_chars(25)
-    nameBox.pack_start(nameLabel, false, false, 0)
-    nameBox.pack_start(layoutNameEntry, false, false, 0)
+    layoutNameEntry.set_hexpand(true)
+    topRow.append(layoutSearchEntry)
+    topRow.append(nameLabel)
+    topRow.append(layoutNameEntry)
 
-    // Existing layouts list
-    const scrollWindow = new Gtk.ScrolledWindow()
-    scrollWindow.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    scrollWindow.set_min_content_height(120)
-    scrollWindow.set_min_content_width(450)
+    // FlowBox for layouts (grid layout - uses width intelligently)
+    const layoutScroll = new Gtk.ScrolledWindow()
+    layoutScroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+    layoutScroll.set_vexpand(true)
+    layoutScroll.set_hexpand(true)
 
-    layoutListBox = new Gtk.ListBox()
-    layoutListBox.set_selection_mode(Gtk.SelectionMode.SINGLE)
-    layoutListBox.get_style_context().add_class("layout-list")
+    layoutFlowBox = new Gtk.FlowBox()
+    layoutFlowBox.set_valign(Gtk.Align.START)
+    layoutFlowBox.set_max_children_per_line(20)
+    layoutFlowBox.set_min_children_per_line(3)
+    layoutFlowBox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+    layoutFlowBox.set_homogeneous(true)
+    layoutFlowBox.set_column_spacing(8)
+    layoutFlowBox.set_row_spacing(8)
+    layoutFlowBox.get_style_context().add_class("layout-flow")
 
-    scrollWindow.add(layoutListBox)
+    // Filter function for search
+    layoutFlowBox.set_filter_func((child: Gtk.FlowBoxChild) => {
+        if (!layoutSearchEntry) return true
+        const searchText = layoutSearchEntry.get_text().toLowerCase()
+        if (!searchText) return true
+        const name = child.get_name()
+        return name ? name.toLowerCase().includes(searchText) : true
+    })
+
+    layoutSearchEntry.connect("search-changed", () => {
+        if (layoutFlowBox) layoutFlowBox.invalidate_filter()
+    })
+
+    layoutScroll.set_child(layoutFlowBox)
 
     // Layout buttons
-    const layoutButtonBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
+    const layoutButtonBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 12 })
     layoutButtonBox.set_halign(Gtk.Align.CENTER)
-
-    let selectedOldName: string | null = null
+    layoutButtonBox.set_margin_top(8)
+    layoutButtonBox.set_margin_bottom(8)
 
     const loadBtn = new Gtk.Button({ label: "Load" })
     loadBtn.get_style_context().add_class("toolbar-button")
@@ -580,15 +700,15 @@ function createLayoutPanel(): Gtk.Box {
     // Update on name entry change
     layoutNameEntry.connect("changed", updateLayoutButtonStates)
 
-    // Update on row selection
-    layoutListBox.connect("row-selected", (_: Gtk.ListBox, row: Gtk.ListBoxRow | null) => {
-        if (row && layoutNameEntry) {
-            const rowBox = row.get_child() as Gtk.Box
-            const children = rowBox.get_children()
-            const rowLabel = children[2] as Gtk.Label
-            selectedOldName = rowLabel.get_label()
-            layoutNameEntry.set_text(selectedOldName)
-            updateLayoutButtonStates()
+    // Update on flow box selection
+    layoutFlowBox.connect("child-activated", (_: Gtk.FlowBox, child: Gtk.FlowBoxChild) => {
+        if (child && layoutNameEntry) {
+            const name = child.get_name()
+            if (name) {
+                selectedOldName = name
+                layoutNameEntry.set_text(name)
+                updateLayoutButtonStates()
+            }
         }
     })
 
@@ -633,6 +753,14 @@ function createLayoutPanel(): Gtk.Box {
                 deleteLayout(selectedOldName)
                 layout.name = newName
                 saveLayoutToConfig(layout, true)
+
+                // Update all mappings that reference the old name
+                const mappings = loadAllMappings()
+                const updatedMappings = mappings.map(m =>
+                    m.layout === selectedOldName ? { ...m, layout: newName } : m
+                )
+                saveMappings(updatedMappings)
+
                 if (currentLayout.name === selectedOldName) {
                     currentLayout.name = newName
                 }
@@ -662,48 +790,56 @@ function createLayoutPanel(): Gtk.Box {
     // Initial state
     updateLayoutButtonStates()
 
-    layoutButtonBox.pack_start(loadBtn, false, false, 0)
-    layoutButtonBox.pack_start(saveBtn, false, false, 0)
-    layoutButtonBox.pack_start(renameBtn, false, false, 0)
-    layoutButtonBox.pack_start(deleteBtn, false, false, 0)
+    layoutButtonBox.append(loadBtn)
+    layoutButtonBox.append(saveBtn)
+    layoutButtonBox.append(renameBtn)
+    layoutButtonBox.append(deleteBtn)
 
     // === MAPPINGS SECTION ===
-    const mappingsHeader = new Gtk.Label({ label: "Monitor/Workspace → Layout Mappings" })
+    const mappingsHeader = new Gtk.Label({ label: "Mappings" })
     mappingsHeader.get_style_context().add_class("section-header")
     mappingsHeader.set_halign(Gtk.Align.START)
 
-    // Mappings list with headers
-    const mappingsContainer = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 4 })
+    // Mappings search
+    mappingsSearchEntry = new Gtk.SearchEntry()
+    mappingsSearchEntry.set_placeholder_text("Filter...")
+    mappingsSearchEntry.set_hexpand(true)
 
-    const headerRow = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
-    headerRow.get_style_context().add_class("mapping-header")
-    const monitorHeader = new Gtk.Label({ label: "Monitor" })
-    monitorHeader.set_width_chars(12)
-    monitorHeader.set_halign(Gtk.Align.START)
-    const wsHeader = new Gtk.Label({ label: "Workspaces" })
-    wsHeader.set_width_chars(12)
-    wsHeader.set_halign(Gtk.Align.START)
-    const layoutHeader = new Gtk.Label({ label: "Layout" })
-    layoutHeader.set_width_chars(15)
-    layoutHeader.set_halign(Gtk.Align.START)
-    headerRow.pack_start(monitorHeader, false, false, 0)
-    headerRow.pack_start(wsHeader, false, false, 0)
-    headerRow.pack_start(layoutHeader, false, false, 0)
-    mappingsContainer.pack_start(headerRow, false, false, 0)
-
+    // FlowBox for mappings (grid layout - uses width intelligently)
     const mappingsScroll = new Gtk.ScrolledWindow()
-    mappingsScroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    mappingsScroll.set_min_content_height(180)
-    mappingsScroll.set_min_content_width(450)
+    mappingsScroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+    mappingsScroll.set_vexpand(true)
+    mappingsScroll.set_hexpand(true)
 
-    mappingsListBox = new Gtk.ListBox()
-    mappingsListBox.set_selection_mode(Gtk.SelectionMode.SINGLE)
-    mappingsListBox.get_style_context().add_class("mappings-list")
-    mappingsScroll.add(mappingsListBox)
-    mappingsContainer.pack_start(mappingsScroll, true, true, 0)
+    mappingsFlowBox = new Gtk.FlowBox()
+    mappingsFlowBox.set_valign(Gtk.Align.START)
+    mappingsFlowBox.set_max_children_per_line(10)
+    mappingsFlowBox.set_min_children_per_line(2)
+    mappingsFlowBox.set_selection_mode(Gtk.SelectionMode.NONE)
+    mappingsFlowBox.set_homogeneous(false)
+    mappingsFlowBox.set_column_spacing(8)
+    mappingsFlowBox.set_row_spacing(8)
+    mappingsFlowBox.get_style_context().add_class("mappings-flow")
+
+    // Filter function for search
+    mappingsFlowBox.set_filter_func((child: Gtk.FlowBoxChild) => {
+        if (!mappingsSearchEntry) return true
+        const searchText = mappingsSearchEntry.get_text().toLowerCase()
+        if (!searchText) return true
+        const text = child.get_name()
+        return text ? text.toLowerCase().includes(searchText) : true
+    })
+
+    mappingsSearchEntry.connect("search-changed", () => {
+        if (mappingsFlowBox) mappingsFlowBox.invalidate_filter()
+    })
+
+    mappingsScroll.set_child(mappingsFlowBox)
 
     // Add mapping row
-    const addMappingBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
+    const addMappingBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 12 })
+    addMappingBox.set_halign(Gtk.Align.CENTER)
+    addMappingBox.set_margin_top(8)
 
     const monitorCombo = new Gtk.ComboBoxText()
     monitorCombo.get_style_context().add_class("mapping-combo")
@@ -718,8 +854,100 @@ function createLayoutPanel(): Gtk.Box {
     wsEntry.set_width_chars(10)
     wsEntry.set_text("*")
 
-    const layoutCombo = new Gtk.ComboBoxText()
-    layoutCombo.get_style_context().add_class("mapping-combo")
+    // Searchable layout selector - button with floating popover
+    mappingLayoutButton = new Gtk.Button({ label: "Select Layout ▾" })
+    mappingLayoutButton.get_style_context().add_class("toolbar-button")
+    mappingLayoutButton.set_size_request(150, -1)
+
+    // Popover floats over content - no layout shift
+    const layoutPopover = new Gtk.Popover()
+    layoutPopover.set_parent(mappingLayoutButton)
+    layoutPopover.set_autohide(true)
+    layoutPopover.set_has_arrow(false)
+    layoutPopover.set_position(Gtk.PositionType.TOP)  // Opens upward
+    layoutPopover.get_style_context().add_class("layout-popover")
+
+    // ESC to close popover
+    const popoverKeyController = new Gtk.EventControllerKey()
+    popoverKeyController.connect("key-pressed", (_controller: Gtk.EventControllerKey, keyval: number, _keycode: number, _state: Gdk.ModifierType) => {
+        if (keyval === Gdk.KEY_Escape) {
+            layoutPopover.popdown()
+            return true
+        }
+        return false
+    })
+    layoutPopover.add_controller(popoverKeyController)
+
+    const popoverContent = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 8 })
+    popoverContent.set_size_request(300, 350)  // Fixed size - no resizing
+    popoverContent.set_margin_start(12)
+    popoverContent.set_margin_end(12)
+    popoverContent.set_margin_top(12)
+    popoverContent.set_margin_bottom(12)
+
+    const layoutDropdownSearch = new Gtk.SearchEntry()
+    layoutDropdownSearch.set_placeholder_text("Search...")
+    layoutDropdownSearch.set_size_request(280, -1)
+
+    // ESC on search entry closes popover
+    const searchKeyController = new Gtk.EventControllerKey()
+    searchKeyController.connect("key-pressed", (_controller: Gtk.EventControllerKey, keyval: number, _keycode: number, _state: Gdk.ModifierType) => {
+        if (keyval === Gdk.KEY_Escape) {
+            layoutPopover.popdown()
+            return true
+        }
+        return false
+    })
+    layoutDropdownSearch.add_controller(searchKeyController)
+
+    const layoutDropdownScroll = new Gtk.ScrolledWindow()
+    layoutDropdownScroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+    layoutDropdownScroll.set_size_request(280, 300)
+
+    const layoutDropdownList = new Gtk.FlowBox()
+    layoutDropdownList.set_valign(Gtk.Align.START)
+    layoutDropdownList.set_max_children_per_line(1)
+    layoutDropdownList.set_min_children_per_line(1)
+    layoutDropdownList.set_selection_mode(Gtk.SelectionMode.SINGLE)
+    layoutDropdownList.get_style_context().add_class("layout-dropdown-list")
+
+    // Filter function
+    layoutDropdownList.set_filter_func((child: Gtk.FlowBoxChild) => {
+        const searchText = layoutDropdownSearch.get_text().toLowerCase()
+        if (!searchText) return true
+        const name = child.get_name()
+        return name ? name.toLowerCase().includes(searchText) : true
+    })
+
+    layoutDropdownSearch.connect("search-changed", () => {
+        layoutDropdownList.invalidate_filter()
+    })
+
+    // Open popover on button click
+    mappingLayoutButton.connect("clicked", () => {
+        layoutDropdownSearch.set_text("")
+        layoutDropdownList.invalidate_filter()
+        layoutPopover.popup()
+        layoutDropdownSearch.grab_focus()
+    })
+
+    // Select layout from list
+    layoutDropdownList.connect("child-activated", (_: Gtk.FlowBox, child: Gtk.FlowBoxChild) => {
+        const name = child.get_name()
+        if (name && mappingLayoutButton) {
+            selectedMappingLayout = name
+            mappingLayoutButton.set_label(name + " ▾")
+            layoutPopover.popdown()
+        }
+    })
+
+    layoutDropdownScroll.set_child(layoutDropdownList)
+    popoverContent.append(layoutDropdownSearch)
+    popoverContent.append(layoutDropdownScroll)
+    layoutPopover.set_child(popoverContent)
+
+    // Store reference for refresh
+    mappingLayoutDropdownList = layoutDropdownList
 
     const addMappingBtn = new Gtk.Button({ label: "+" })
     addMappingBtn.get_style_context().add_class("toolbar-button")
@@ -727,7 +955,7 @@ function createLayoutPanel(): Gtk.Box {
 
     // Function to check if current mapping selection is valid
     const updateAddButtonState = () => {
-        const monitor = monitorCombo.get_active_id() || "*"
+        const monitorId = monitorCombo.get_active_id() || "*"
         const workspaces = wsEntry.get_text() || "*"
         const mappings = loadAllMappings()
 
@@ -735,7 +963,7 @@ function createLayoutPanel(): Gtk.Box {
 
         // Check for exact duplicate (same monitor + same workspaces)
         const isDuplicate = mappings.some(m =>
-            m.monitor === monitor && m.workspaces === workspaces
+            m.monitor === monitorId && m.workspaces === workspaces
         )
         // Duplicates are allowed - they replace the existing mapping
         // So we don't block duplicates
@@ -749,14 +977,14 @@ function createLayoutPanel(): Gtk.Box {
         }
 
         // Block (* + *) if any mappings exist
-        if (canAdd && monitor === "*" && workspaces === "*" && mappings.length > 0) {
+        if (canAdd && monitorId === "*" && workspaces === "*" && mappings.length > 0) {
             canAdd = false
         }
 
         // Block (monitor + *) if mappings for this monitor already exist
         if (canAdd && workspaces === "*") {
             const hasMonitorMappings = mappings.some(m =>
-                m.monitor === monitor || (monitor !== "*" && m.monitor === "*")
+                m.monitor === monitorId || (monitorId !== "*" && m.monitor === "*")
             )
             if (hasMonitorMappings) {
                 canAdd = false
@@ -766,7 +994,7 @@ function createLayoutPanel(): Gtk.Box {
         // Block if covered by (this monitor + *) wildcard
         if (canAdd && workspaces !== "*") {
             const coveredByMonitorWildcard = mappings.some(m =>
-                m.monitor === monitor && m.workspaces === "*"
+                m.monitor === monitorId && m.workspaces === "*"
             )
             if (coveredByMonitorWildcard) {
                 canAdd = false
@@ -781,22 +1009,22 @@ function createLayoutPanel(): Gtk.Box {
     wsEntry.connect("changed", updateAddButtonState)
 
     addMappingBtn.connect("clicked", async () => {
-        const monitor = monitorCombo.get_active_id() || "*"
+        const monitorId = monitorCombo.get_active_id() || "*"
         const workspaces = wsEntry.get_text() || "*"
-        const layout = layoutCombo.get_active_id()
+        const layout = selectedMappingLayout
         if (layout) {
             const mappings = loadAllMappings()
 
             // Exact duplicate - replace the layout
             const existingIndex = mappings.findIndex(m =>
-                m.monitor === monitor && m.workspaces === workspaces
+                m.monitor === monitorId && m.workspaces === workspaces
             )
 
             if (existingIndex >= 0) {
                 mappings[existingIndex].layout = layout
                 saveMappings(mappings)
             } else {
-                addMapping({ monitor, workspaces, layout })
+                addMapping({ monitor: monitorId, workspaces, layout })
             }
             await reloadConfig()
             refreshMappingsList()
@@ -805,128 +1033,191 @@ function createLayoutPanel(): Gtk.Box {
         }
     })
 
-    addMappingBox.pack_start(monitorCombo, false, false, 0)
-    addMappingBox.pack_start(wsEntry, false, false, 0)
-    addMappingBox.pack_start(layoutCombo, false, false, 0)
-    addMappingBox.pack_start(addMappingBtn, false, false, 0)
+    addMappingBox.append(monitorCombo)
+    addMappingBox.append(wsEntry)
+    addMappingBox.append(mappingLayoutButton)
+    addMappingBox.append(addMappingBtn)
 
-    // Close button
-    const closeBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
-    closeBox.set_halign(Gtk.Align.CENTER)
-    const closeBtn = new Gtk.Button({ label: "Close" })
-    closeBtn.get_style_context().add_class("toolbar-button")
-    closeBtn.connect("clicked", hideLayoutPanel)
-    closeBox.pack_start(closeBtn, false, false, 0)
+    // Assemble panel with Paned for resizable split
+    const paned = new Gtk.Paned({ orientation: Gtk.Orientation.VERTICAL })
+    paned.set_vexpand(true)
+    paned.set_hexpand(true)
 
-    // Assemble panel
-    panel.pack_start(layoutsHeader, false, false, 0)
-    panel.pack_start(nameBox, false, false, 0)
-    panel.pack_start(scrollWindow, false, false, 0)
-    panel.pack_start(layoutButtonBox, false, false, 0)
-    panel.pack_start(new Gtk.Separator({ orientation: Gtk.Orientation.HORIZONTAL }), false, false, 4)
-    panel.pack_start(mappingsHeader, false, false, 0)
-    panel.pack_start(mappingsContainer, false, false, 0)
-    panel.pack_start(addMappingBox, false, false, 0)
-    panel.pack_start(new Gtk.Separator({ orientation: Gtk.Orientation.HORIZONTAL }), false, false, 4)
-    panel.pack_start(closeBox, false, false, 0)
+    // Top section: Layouts
+    const layoutsBox = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 8 })
+    layoutsBox.append(layoutsHeader)
+    layoutsBox.append(topRow)
+    layoutsBox.append(layoutScroll)
+    layoutsBox.append(layoutButtonBox)
 
-    // Store layoutCombo ref for refresh
-    layoutComboRef = layoutCombo
+    // Bottom section: Mappings
+    const mappingsBox = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 8 })
+    mappingsBox.set_margin_top(16)
+    mappingsBox.append(mappingsHeader)
+    mappingsBox.append(mappingsSearchEntry)
+    mappingsBox.append(mappingsScroll)
+    mappingsBox.append(addMappingBox)
+
+    paned.set_start_child(layoutsBox)
+    paned.set_end_child(mappingsBox)
+    paned.set_resize_start_child(true)
+    paned.set_resize_end_child(true)
+    paned.set_shrink_start_child(false)
+    paned.set_shrink_end_child(false)
+
+    panel.append(paned)
 
     // Initial button state check
     updateAddButtonState()
 
+    // Populate layout dropdown initially
+    populateMappingLayoutDropdown()
+
     return panel
 }
 
-function refreshLayoutList() {
-    if (!layoutListBox) return
+// Populate the mapping layout dropdown with layout names
+function populateMappingLayoutDropdown() {
+    if (!mappingLayoutDropdownList) return
 
-    // Clear existing rows
-    layoutListBox.foreach((child: Gtk.Widget) => layoutListBox!.remove(child))
+    removeAllChildren(mappingLayoutDropdownList)
+
+    const layoutNames = getLayoutNames()
+    for (const name of layoutNames) {
+        const item = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL })
+        item.get_style_context().add_class("layout-dropdown-item")
+        item.set_hexpand(true)
+
+        const label = new Gtk.Label({ label: name })
+        label.set_halign(Gtk.Align.START)
+        label.set_hexpand(true)
+        item.append(label)
+
+        const child = new Gtk.FlowBoxChild()
+        child.set_name(name)
+        child.set_child(item)
+        mappingLayoutDropdownList.append(child)
+    }
+
+    // Select first layout by default
+    if (layoutNames.length > 0 && !selectedMappingLayout) {
+        selectedMappingLayout = layoutNames[0]
+        if (mappingLayoutButton) {
+            mappingLayoutButton.set_label(selectedMappingLayout + " ▾")
+        }
+    }
+}
+
+function refreshLayoutList() {
+    if (!layoutFlowBox) return
+
+    // Clear existing children
+    removeAllChildren(layoutFlowBox)
 
     // Get all mapped layout names (layouts used in any mapping)
     const mappings = loadAllMappings()
     const mappedLayoutNames = new Set(mappings.map(m => m.layout))
 
-    // Add layouts
+    // Add layouts as flow items (cards with hover)
     const layoutNames = getLayoutNames()
     for (const name of layoutNames) {
-        const row = new Gtk.ListBoxRow()
-        const rowBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
+        // Box for hover detection (replaces EventBox)
+        const hoverBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL })
 
-        // Orange arrow = currently loaded in editor (matches zone tile color)
+        const card = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 4 })
+        card.get_style_context().add_class("layout-card")
+        card.set_margin_start(4)
+        card.set_margin_end(4)
+        card.set_margin_top(4)
+        card.set_margin_bottom(4)
+
+        // Hover effects with EventControllerMotion
+        const motionController = new Gtk.EventControllerMotion()
+        motionController.connect("enter", () => {
+            card.get_style_context().add_class("hover")
+        })
+        motionController.connect("leave", () => {
+            card.get_style_context().remove_class("hover")
+        })
+        hoverBox.add_controller(motionController)
+
+        // Status indicators with proper spacing
         const isActive = name === currentLayout.name
+        const isMapped = mappedLayoutNames.has(name)
+
+        // Active indicator (filled/outline arrow)
         const activeIndicator = new Gtk.Label()
         activeIndicator.set_use_markup(true)
         activeIndicator.set_label(isActive
             ? '<span foreground="#cc8844">▶</span>'
-            : '<span foreground="#333333">▷</span>')
-        activeIndicator.set_width_chars(2)
-        activeIndicator.set_xalign(0.5)
-        rowBox.pack_start(activeIndicator, false, false, 0)
+            : '<span foreground="#555555">▷</span>')
+        activeIndicator.set_margin_end(6)
 
-        // Green/gray dot = layout is/isn't used in mappings
-        const isMapped = mappedLayoutNames.has(name)
+        // Mapped indicator (filled/outline circle)
         const mappedIndicator = new Gtk.Label()
         mappedIndicator.set_use_markup(true)
         mappedIndicator.set_label(isMapped
             ? '<span foreground="#00ff00">●</span>'
             : '<span foreground="#555555">○</span>')
-        mappedIndicator.set_width_chars(2)
-        mappedIndicator.set_xalign(0.5)
-        rowBox.pack_start(mappedIndicator, false, false, 0)
+        mappedIndicator.set_margin_end(8)
 
-        const rowLabel = new Gtk.Label({ label: name })
-        rowLabel.set_halign(Gtk.Align.START)
-        rowLabel.set_margin_top(8)
-        rowLabel.set_margin_bottom(8)
-        rowBox.pack_start(rowLabel, true, true, 0)
+        const label = new Gtk.Label({ label: name })
+        label.set_margin_top(6)
+        label.set_margin_bottom(6)
+        label.set_margin_end(8)
 
-        row.add(rowBox)
-        layoutListBox.add(row)
+        card.append(activeIndicator)
+        card.append(mappedIndicator)
+        card.append(label)
+
+        hoverBox.append(card)
+
+        // Store name for selection and filtering
+        const child = new Gtk.FlowBoxChild()
+        child.set_name(name)
+        child.set_child(hoverBox)
+        layoutFlowBox.append(child)
     }
-    layoutListBox.show_all()
 
-    // Update layout combo in add mapping row
-    if (layoutComboRef) {
-        layoutComboRef.remove_all()
-        for (const name of layoutNames) {
-            layoutComboRef.append(name, name)
-        }
-        if (layoutNames.length > 0) {
-            layoutComboRef.set_active_id(layoutNames[0])
-        }
-    }
+    // Update layout dropdown in add mapping row
+    populateMappingLayoutDropdown()
 }
 
 function refreshMappingsList() {
-    if (!mappingsListBox) return
+    const flowBox = mappingsFlowBox
+    if (!flowBox) return
 
-    // Clear existing rows
-    mappingsListBox.foreach((child: Gtk.Widget) => mappingsListBox!.remove(child))
+    // Clear existing children
+    removeAllChildren(flowBox)
 
-    // Add mappings
+    // Add mappings as professional cards
     const mappings = loadAllMappings()
     mappings.forEach((mapping, index) => {
-        const row = new Gtk.ListBoxRow()
-        const rowBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 })
-        rowBox.set_margin_top(4)
-        rowBox.set_margin_bottom(4)
-        rowBox.set_margin_start(8)
-        rowBox.set_margin_end(8)
+        const card = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 4 })
+        card.get_style_context().add_class("mapping-card")
+        card.set_margin_start(4)
+        card.set_margin_end(4)
+        card.set_margin_top(4)
+        card.set_margin_bottom(4)
 
-        const monitorLabel = new Gtk.Label({ label: mapping.monitor })
-        monitorLabel.set_width_chars(12)
-        monitorLabel.set_halign(Gtk.Align.START)
+        // Hover effects
+        const motionController = new Gtk.EventControllerMotion()
+        motionController.connect("enter", () => {
+            card.get_style_context().add_class("hover")
+        })
+        motionController.connect("leave", () => {
+            card.get_style_context().remove_class("hover")
+        })
+        card.add_controller(motionController)
 
-        const wsLabel = new Gtk.Label({ label: mapping.workspaces })
-        wsLabel.set_width_chars(12)
-        wsLabel.set_halign(Gtk.Align.START)
+        // Header row: Layout name + delete button
+        const headerRow = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL })
+        headerRow.set_hexpand(true)
 
         const layoutLabel = new Gtk.Label({ label: mapping.layout })
-        layoutLabel.set_width_chars(15)
+        layoutLabel.get_style_context().add_class("mapping-card-title")
         layoutLabel.set_halign(Gtk.Align.START)
+        layoutLabel.set_hexpand(true)
 
         const deleteBtn = new Gtk.Button({ label: "×" })
         deleteBtn.get_style_context().add_class("mapping-delete-btn")
@@ -937,50 +1228,93 @@ function refreshMappingsList() {
             refreshLayoutList()
         })
 
-        rowBox.pack_start(monitorLabel, false, false, 0)
-        rowBox.pack_start(wsLabel, false, false, 0)
-        rowBox.pack_start(layoutLabel, false, false, 0)
-        rowBox.pack_start(deleteBtn, false, false, 0)
+        headerRow.append(layoutLabel)
+        headerRow.append(deleteBtn)
 
-        row.add(rowBox)
-        mappingsListBox.add(row)
+        // Metadata rows
+        const metaBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 16 })
+        metaBox.get_style_context().add_class("mapping-card-meta")
+
+        // Monitor info
+        const monitorBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 4 })
+        const monitorLabelKey = new Gtk.Label({ label: "Monitor:" })
+        monitorLabelKey.get_style_context().add_class("mapping-card-key")
+        const monitorLabelVal = new Gtk.Label({ label: mapping.monitor === "*" ? "All" : mapping.monitor })
+        monitorLabelVal.get_style_context().add_class("mapping-card-value")
+        monitorBox.append(monitorLabelKey)
+        monitorBox.append(monitorLabelVal)
+
+        // Workspaces info
+        const wsBox = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 4 })
+        const wsLabelKey = new Gtk.Label({ label: "WS:" })
+        wsLabelKey.get_style_context().add_class("mapping-card-key")
+        const wsLabelVal = new Gtk.Label({ label: mapping.workspaces === "*" ? "All" : mapping.workspaces })
+        wsLabelVal.get_style_context().add_class("mapping-card-value")
+        wsBox.append(wsLabelKey)
+        wsBox.append(wsLabelVal)
+
+        metaBox.append(monitorBox)
+        metaBox.append(wsBox)
+
+        card.append(headerRow)
+        card.append(metaBox)
+
+        // Store search text for filtering
+        const searchText = `${mapping.monitor} ${mapping.workspaces} ${mapping.layout}`
+        const child = new Gtk.FlowBoxChild()
+        child.set_name(searchText)
+        child.set_child(card)
+        flowBox.append(child)
     })
-    mappingsListBox.show_all()
 }
 
 async function showLayoutPanel() {
-    // Remove old panel if exists
+    // Remove old panel and recreate (safer than toggling visibility)
     if (layoutPanel && mainOverlay) {
-        mainOverlay.remove(layoutPanel)
+        mainOverlay.remove_overlay(layoutPanel)
         layoutPanel = null
     }
 
-    // Create new panel
+    // Create new panel - centered on screen
     layoutPanel = createLayoutPanel()
     layoutPanel.set_halign(Gtk.Align.CENTER)
     layoutPanel.set_valign(Gtk.Align.CENTER)
-    layoutNameEntry?.set_text(currentLayout.name)
+    layoutPanel.set_can_focus(true)
+    layoutPanel.set_focusable(true)
+
+    // CRITICAL: Add ESC key handler with CAPTURE phase - catches key BEFORE children
+    const panelKeyController = new Gtk.EventControllerKey()
+    panelKeyController.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+    panelKeyController.connect("key-pressed", (_controller: Gtk.EventControllerKey, keyval: number, _keycode: number, _state: Gdk.ModifierType) => {
+        if (keyval === Gdk.KEY_Escape) {
+            hideLayoutPanel()
+            return true
+        }
+        return false
+    })
+    layoutPanel.add_controller(panelKeyController)
+
+    // SAFETY: Also add Close button click handler redundantly
+    // The close button in createLayoutPanel already calls hideLayoutPanel
+
+    // Start with empty entry - user must select a layout first
+    layoutNameEntry?.set_text("")
+    selectedOldName = null
     refreshLayoutList()
     refreshMappingsList()
 
     // Add as overlay (on top of everything)
     if (mainOverlay) {
         mainOverlay.add_overlay(layoutPanel)
-        mainOverlay.set_overlay_pass_through(layoutPanel, false)
-        layoutPanel.show_all()
+        // Grab focus so ESC works
+        layoutPanel.grab_focus()
     }
 }
 
 function hideLayoutPanel() {
-    if (layoutPanel && mainOverlay) {
-        mainOverlay.remove(layoutPanel)
-        layoutPanel = null
+    if (layoutPanel) {
+        layoutPanel.set_visible(false)
     }
-}
-
-// Handle cancel
-function handleCancel() {
-    editorWindow?.hide()
 }
 
 // Handle reset - zurück zu einer einzelnen Kachel
@@ -1003,11 +1337,11 @@ function handleReset() {
 }
 
 // Screen margins (waybar + gaps) - fixed offsets for ALL monitors
-let MARGIN_TOP = 97
-let MARGIN_BOTTOM = 22
-let MARGIN_LEFT = 22
-let MARGIN_RIGHT = 22
-let HEADER_BAR_HEIGHT = 0  // Will be detected from hyprbars plugin
+const MARGIN_TOP = 97
+const MARGIN_BOTTOM = 22
+const MARGIN_LEFT = 22
+const MARGIN_RIGHT = 22
+let HEADER_BAR_HEIGHT = 0  // Detected from hyprbars plugin
 
 // Detect hyprbars header bar height
 async function detectHeaderBarHeight(): Promise<void> {
@@ -1051,7 +1385,7 @@ function selectMonitor(mon: HyprMonitor): MonitorGeometry {
     fullScreenWidth = dims.width
     fullScreenHeight = dims.height
 
-    // Use fixed margins (waybar + gaps) - same for all monitors
+    // Use fixed margins (waybar + gaps) - HEADER_BAR_HEIGHT is per-window, not screen
     return {
         x: MARGIN_LEFT,
         y: MARGIN_TOP,
@@ -1062,9 +1396,6 @@ function selectMonitor(mon: HyprMonitor): MonitorGeometry {
 
 // Get monitor geometry - use layout's monitor or focused one
 async function getMonitorGeometry(preferMonitor?: string): Promise<MonitorGeometry> {
-    // Detect hyprbars header height
-    await detectHeaderBarHeight()
-
     allMonitors = await fetchAllMonitors()
 
     if (allMonitors.length === 0) {
@@ -1105,8 +1436,8 @@ function createToolbar(): Gtk.Box {
     configBtn.get_style_context().add_class("toolbar-save")
     configBtn.connect("clicked", showLayoutPanel)
 
-    toolbar.pack_start(resetBtn, false, false, 0)
-    toolbar.pack_start(configBtn, false, false, 0)
+    toolbar.append(resetBtn)
+    toolbar.append(configBtn)
 
     return toolbar
 }
@@ -1132,10 +1463,9 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
         const okBtn = new Gtk.Button({ label: "OK" })
         okBtn.connect("clicked", () => errorWin.destroy())
 
-        errorBox.pack_start(errorLabel, false, false, 0)
-        errorBox.pack_start(okBtn, false, false, 0)
-        errorWin.add(errorBox)
-        errorWin.show_all()
+        errorBox.append(errorLabel)
+        errorBox.append(okBtn)
+        errorWin.set_child(errorBox)
 
         return errorWin
     }
@@ -1165,81 +1495,91 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
         resizable: false,
     })
 
-    win.set_wmclass(WINDOW_NAME, WINDOW_NAME)
     win.get_style_context().add_class("zone-editor")
     editorWindow = win
 
     // Initialize layer shell
     try {
-        GtkLayerShell.init_for_window(win)
-        GtkLayerShell.set_layer(win, GtkLayerShell.Layer.OVERLAY)
+        Gtk4LayerShell.init_for_window(win)
+        Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.OVERLAY)
         const display = Gdk.Display.get_default()
         if (display) {
-            const monitor = display.get_monitor(0)
-            if (monitor) {
-                GtkLayerShell.set_monitor(win, monitor)
+            const monitors = display.get_monitors()
+            const gdkMonitor = monitors.get_item(0) as Gdk.Monitor | null
+            if (gdkMonitor) {
+                Gtk4LayerShell.set_monitor(win, gdkMonitor)
             }
         }
-        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.TOP, true)
-        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.BOTTOM, true)
-        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.LEFT, true)
-        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.RIGHT, true)
-        GtkLayerShell.set_exclusive_zone(win, -1)
-        GtkLayerShell.set_keyboard_mode(win, GtkLayerShell.KeyboardMode.ON_DEMAND)
+        Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.TOP, true)
+        Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.BOTTOM, true)
+        Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.LEFT, true)
+        Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.RIGHT, true)
+        Gtk4LayerShell.set_exclusive_zone(win, -1)
+        Gtk4LayerShell.set_keyboard_mode(win, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
     } catch (e) {
         console.error("Layer shell init failed:", e)
     }
 
     // Handle close
-    win.connect("delete-event", () => {
+    win.connect("close-request", () => {
         win.hide()
         return true
     })
 
-    // Keyboard handling (Escape to close)
-    win.connect("key-press-event", (_: Gtk.Window, event: Gdk.Event) => {
-        const [, keyval] = event.get_keyval()
+    // Keyboard handling (Escape to close) - GTK4 EventControllerKey
+    // CRITICAL: ESC must ALWAYS work - use CAPTURE phase to catch before any child
+    const keyController = new Gtk.EventControllerKey()
+    keyController.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+    keyController.connect("key-pressed", (_controller: Gtk.EventControllerKey, keyval: number, _keycode: number, _state: Gdk.ModifierType) => {
         if (keyval === Gdk.KEY_Escape) {
+            // First close config panel if open AND VISIBLE
+            if (layoutPanel && layoutPanel.get_visible()) {
+                hideLayoutPanel()
+                return true
+            }
+            // Then hide window
             win.hide()
             return true
         }
         return false
     })
+    win.add_controller(keyController)
 
-    // Window-level drag handling for splitters
-    win.add_events(
-        Gdk.EventMask.POINTER_MOTION_MASK |
-        Gdk.EventMask.BUTTON_RELEASE_MASK
-    )
+    // Window-level drag handling for splitters - GTK4 EventControllerMotion
+    const winMotionController = new Gtk.EventControllerMotion()
+    winMotionController.connect("motion", (_controller: Gtk.EventControllerMotion, x: number, y: number) => {
+        if (!activeDragSegment) return
 
-    win.connect("motion-notify-event", (_: Gtk.Window, event: Gdk.Event) => {
-        if (!activeDragSegment) return false
+        // Calculate mouse position as percentage of usable area
+        // Mouse x/y are window coords, subtract monitor offset to get position in usable area
+        const mouseInUsable = activeDragSegment.orientation === 'vertical'
+            ? x - monitor.x
+            : y - monitor.y
+        const mousePercent = mouseInUsable / dragUsableSize
 
-        const [, rootX, rootY] = event.get_root_coords()
-        const currentPos = activeDragSegment.orientation === 'vertical' ? rootX : rootY
-        const pixelDelta = currentPos - dragStartPos
+        // Delta from original splitter position to current mouse position
+        const percentDelta = mousePercent - dragStartSplitterPos
 
-        // Use usable size captured at drag start to prevent spacing drift
-        const percentDelta = pixelDelta / dragUsableSize
-
-        if (Math.abs(percentDelta) > 0.001) {
-            moveSplitterSegment(activeDragSegment, percentDelta)
-            dragStartPos = currentPos
-        }
-
-        return true
+        moveSplitterAbsolute(activeDragSegment, percentDelta)
     })
+    win.add_controller(winMotionController)
 
-    win.connect("button-release-event", () => {
+    // Window-level button release handling - GTK4 GestureClick
+    const winClickGesture = new Gtk.GestureClick()
+    winClickGesture.set_button(0)
+    winClickGesture.connect("released", () => {
         if (activeDragSegment) {
+            if (activeDragWidget) {
+                activeDragWidget.get_style_context().remove_class("dragging")
+            }
             activeDragSegment = null
             activeDragWidget = null
             dragLeftZones = []
             dragRightZones = []
             dragUsableSize = 0
         }
-        return false
     })
+    win.add_controller(winClickGesture)
 
     // Create main layout
     mainOverlay = new Gtk.Overlay()
@@ -1248,7 +1588,7 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
     // Zone container (fixed positioning for absolute placement - fullscreen)
     zoneContainer = new Gtk.Fixed()
     zoneContainer.set_size_request(fullScreenWidth, fullScreenHeight)
-    mainOverlay.add(zoneContainer)
+    mainOverlay.set_child(zoneContainer)
 
     // Toolbar at bottom - must be on top of zones
     const toolbarWrapper = new Gtk.Box({
@@ -1257,16 +1597,13 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
         halign: Gtk.Align.CENTER,
         margin_bottom: 30,
     })
-    toolbarWrapper.pack_start(createToolbar(), false, false, 0)
+    toolbarWrapper.append(createToolbar())
     mainOverlay.add_overlay(toolbarWrapper)
-    mainOverlay.set_overlay_pass_through(toolbarWrapper, false)
 
-    win.add(mainOverlay)
+    win.set_child(mainOverlay)
 
     // Initial zone display
     updateZoneDisplay()
-
-    mainOverlay.show_all()
 
     return win
 }

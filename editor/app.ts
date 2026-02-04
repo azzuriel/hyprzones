@@ -1,6 +1,6 @@
 // HyprZones Editor - AGS v3 application entry point
 
-import app from "ags/gtk3/app"
+import app from "ags/gtk4/app"
 import style from "./style.scss"
 import ZoneEditor, { reloadCurrentLayout } from "./widget/ZoneEditor"
 

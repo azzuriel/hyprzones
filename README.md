@@ -116,6 +116,43 @@ Add to `~/.config/hypr/hyprland.conf`:
 plugin = ~/.local/share/hyprload/plugins/hyprzones.so
 ```
 
+## Screen Area Reference
+
+### Standard 4K Monitor (3840×2160) with Hyprland
+
+The usable zone area depends on your Hyprland configuration (waybar, gaps, etc.):
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Waybar (75px)                            │
+├─────────────────────────────────────────────────────────────┤
+│ G │                                                     │ G │
+│ A │                                                     │ A │
+│ P │              Usable Zone Area                       │ P │
+│   │              3796 × 2041 px                         │   │
+│ 2 │                                                     │ 2 │
+│ 2 │         Position: (22, 97)                          │ 2 │
+│   │                                                     │   │
+├───┴─────────────────────────────────────────────────────┴───┤
+│                      Gap (22px)                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Default margins (with waybar + gaps):**
+
+| Margin | Value | Description |
+|--------|-------|-------------|
+| LEFT   | 22px  | Outer gap |
+| TOP    | 97px  | Waybar (75px) + outer gap (22px) |
+| RIGHT  | 22px  | Outer gap |
+| BOTTOM | 22px  | Outer gap |
+
+**Usable area calculation:**
+- Width: 3840 - 22 - 22 = 3796px
+- Height: 2160 - 97 - 22 = 2041px
+
+These values are used by the editor for accurate zone positioning. Adjust in the editor source if your setup differs.
+
 ## Configuration
 
 Create `~/.config/hypr/hyprzones.toml`:

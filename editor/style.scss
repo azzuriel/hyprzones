@@ -17,29 +17,26 @@ $text-muted: #4a5a5a;
 $border-primary: #2a2a2a;
 $border-secondary: #1f1f1f;
 $border-active: #3a5a3a;
-$border-hover: #3a5a6a;
+$border-hover: #4a4a4a;
 
 // === ACCENT COLORS (Muted Green) ===
 $accent-primary: #2a5a2a;
 $accent-hover: #3a6a3a;
 $accent-active: #4a7a4a;
 
-// === INFO/CYAN ===
-$info: #3a5a6a;
-$info-light: #5a9cb8;
-
 // === ZONE COLORS (Muted dark orange, 70% opaque) ===
 $zone-fill: rgba(45, 32, 20, 0.7);
 $zone-fill-hover: rgba(60, 43, 28, 0.7);
 $zone-border: #5a4030;
 
-// === SPLITTER COLORS ===
-$splitter-color: #2a2a2a;
-$splitter-hover: #3a5a6a;
-$splitter-active: #5a9cb8;
+// === SPLITTER COLORS (Dark muted) ===
+$splitter-color: #3a4a4a;
+$splitter-hover: #4a5a5a;
+$splitter-active: #5a6a6a;
 
 // === BACKDROP ===
 $backdrop: rgba(0, 0, 0, 0.85);
+
 
 // ============================================
 // EDITOR WINDOW
@@ -60,7 +57,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 .zone {
     background: $zone-fill;
     border: 1px solid $zone-border;
-    border-radius: 0px;
+    border-radius: 0;
 
     &:hover {
         background: $zone-fill-hover;
@@ -81,7 +78,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 
 .zone-split-btn {
     padding: 0;
-    border-radius: 2px;
+    border-radius: 0;
     border: 1px solid $border-primary;
     font-size: 12px;
     font-family: "Fira Code", monospace;
@@ -89,11 +86,29 @@ $backdrop: rgba(0, 0, 0, 0.85);
     background: $surface-3;
     min-width: 24px;
     min-height: 24px;
+    outline-style: none;
+    outline-width: 0;
+    outline-color: transparent;
+    outline-offset: 0;
+        -gtk-icon-filter: none;
+    box-shadow: none;
+    border-image: none;
 
     &:hover {
         background: $surface-4;
         border-color: $border-hover;
         color: $text-primary;
+    }
+
+    &:focus {
+        outline-style: none;
+        outline-width: 0;
+        outline-color: transparent;
+        outline-offset: 0;
+                -gtk-icon-filter: none;
+        box-shadow: none;
+        border-image: none;
+        border-color: $border-primary;
     }
 }
 
@@ -112,7 +127,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 
     .splitter-handle {
         background: $splitter-color;
-        border-radius: 1px;
+        border-radius: 0;
         transition: background 0.15s;
     }
 
@@ -140,7 +155,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 .toolbar {
     background: $surface-3;
     border: 1px solid $border-primary;
-    border-radius: 4px;
+    border-radius: 0;
     padding: 8px 16px;
 }
 
@@ -153,7 +168,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 .toolbar-combo {
     background: $surface-4;
     border: 1px solid $border-primary;
-    border-radius: 2px;
+    border-radius: 0;
     padding: 4px 8px;
     color: $text-primary;
     font-size: 12px;
@@ -167,7 +182,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 
 .toolbar-button {
     padding: 6px 16px;
-    border-radius: 2px;
+    border-radius: 0;
     border: 1px solid $border-primary;
     font-size: 12px;
     font-weight: 500;
@@ -175,11 +190,19 @@ $backdrop: rgba(0, 0, 0, 0.85);
     color: $text-primary;
     background: $surface-4;
     min-width: 70px;
-
+    outline-style: none;
+    outline-width: 0;
+    
     &:hover {
         background: $surface-5;
         border-color: $border-hover;
     }
+
+    &:focus {
+        border-color: $border-primary;
+        outline-style: none;
+        outline-width: 0;
+            }
 
     &:disabled {
         opacity: 0.4;
@@ -197,6 +220,17 @@ $backdrop: rgba(0, 0, 0, 0.85);
         border-color: $accent-hover;
     }
 
+    &:focus {
+        outline-style: none;
+        outline-width: 0;
+        outline-color: transparent;
+        outline-offset: 0;
+                -gtk-icon-filter: none;
+        box-shadow: none;
+        border-image: none;
+        border-color: $accent-primary;
+    }
+
     &:disabled {
         background: $surface-4;
         border-color: $border-primary;
@@ -211,6 +245,17 @@ $backdrop: rgba(0, 0, 0, 0.85);
     &:hover {
         background: $surface-5;
     }
+
+    &:focus {
+        outline-style: none;
+        outline-width: 0;
+        outline-color: transparent;
+        outline-offset: 0;
+                -gtk-icon-filter: none;
+        box-shadow: none;
+        border-image: none;
+        border-color: $border-primary;
+    }
 }
 
 .toolbar-reset {
@@ -220,6 +265,17 @@ $backdrop: rgba(0, 0, 0, 0.85);
     &:hover {
         background: rgba(138, 74, 74, 0.4);
         border-color: rgba(138, 74, 74, 0.6);
+    }
+
+    &:focus {
+        outline-style: none;
+        outline-width: 0;
+        outline-color: transparent;
+        outline-offset: 0;
+                -gtk-icon-filter: none;
+        box-shadow: none;
+        border-image: none;
+        border-color: rgba(138, 74, 74, 0.5);
     }
 
     &:disabled {
@@ -237,13 +293,13 @@ $backdrop: rgba(0, 0, 0, 0.85);
 .layout-dialog {
     background: $surface-2;
     border: 1px solid $border-primary;
-    border-radius: 4px;
+    border-radius: 0;
     padding: 16px;
 
     entry {
         background: $surface-3;
         border: 1px solid $border-primary;
-        border-radius: 2px;
+        border-radius: 0;
         padding: 6px 10px;
         color: $text-primary;
         font-family: "Fira Code", monospace;
@@ -263,7 +319,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 .layout-list {
     background: $surface-3;
     border: 1px solid $border-primary;
-    border-radius: 2px;
+    border-radius: 0;
 
     row {
         background: transparent;
@@ -322,7 +378,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 .mappings-list {
     background: $surface-3;
     border: 1px solid $border-primary;
-    border-radius: 2px;
+    border-radius: 0;
 
     row {
         background: transparent;
@@ -333,7 +389,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
         }
 
         &:selected {
-            background: rgba($info, 0.3);
+            background: rgba($accent-primary, 0.3);
         }
 
         label {
@@ -345,7 +401,7 @@ $backdrop: rgba(0, 0, 0, 0.85);
 .mapping-combo {
     background: $surface-4;
     border: 1px solid $border-primary;
-    border-radius: 2px;
+    border-radius: 0;
     padding: 4px 8px;
     color: $text-primary;
     font-size: 11px;
@@ -355,20 +411,479 @@ $backdrop: rgba(0, 0, 0, 0.85);
     &:hover {
         border-color: $border-hover;
     }
+
+    // GTK4 ComboBoxText internal styling
+    > button {
+        background: $surface-4;
+        border: none;
+        color: $text-primary;
+        padding: 4px 8px;
+    }
+
+    > popover {
+        background: $surface-3;
+        border: 1px solid $border-primary;
+
+        > contents {
+            background: $surface-3;
+            padding: 4px;
+        }
+
+        listview, list {
+            background: $surface-3;
+
+            > row {
+                background: transparent;
+                color: $text-primary;
+                padding: 4px 8px;
+
+                &:hover {
+                    background: $surface-4;
+                }
+
+                &:selected {
+                    background: $accent-primary;
+                }
+            }
+        }
+    }
+}
+
+// GTK4 ComboBoxText global styling - all possible selectors
+combobox,
+combobox.combo,
+.combo,
+comboboxtext {
+    background: $surface-4;
+    border: 1px solid $border-primary;
+    border-radius: 0;
+    color: $text-primary;
+
+    button, > button, .toggle {
+        background: $surface-4;
+        border: none;
+        color: $text-primary;
+        padding: 4px 8px;
+        min-height: 24px;
+
+        &:hover {
+            background: $surface-5;
+        }
+
+        box, > box {
+            background: transparent;
+        }
+
+        cellview {
+            background: transparent;
+            color: $text-primary;
+        }
+
+        arrow {
+            color: $text-secondary;
+            -gtk-icon-size: 16px;
+        }
+    }
+
+    popover, > popover, window.popup {
+        background: $surface-3;
+        border: 1px solid $border-primary;
+
+        contents, > contents {
+            background: $surface-3;
+        }
+
+        scrolledwindow {
+            background: $surface-3;
+        }
+
+        treeview, listview, list {
+            background: $surface-3;
+
+            row, > row {
+                background: transparent;
+                color: $text-primary;
+                padding: 6px 8px;
+
+                &:hover {
+                    background: $surface-4;
+                }
+
+                &:selected {
+                    background: $accent-primary;
+                }
+
+                cell, cellrenderertext {
+                    color: $text-primary;
+                }
+            }
+        }
+    }
+}
+
+dropdown {
+    background: $surface-4;
+    border: 1px solid $border-primary;
+    border-radius: 0;
+    color: $text-primary;
+    min-height: 28px;
+
+    button, > button {
+        background: transparent;
+        border: none;
+        color: $text-primary;
+        padding: 4px 8px;
+    }
+
+    popover, > popover {
+        background: $surface-3;
+        border: 1px solid $border-primary;
+
+        listview {
+            background: $surface-3;
+
+            row, > row {
+                background: transparent;
+                color: $text-primary;
+                padding: 6px 8px;
+
+                &:hover {
+                    background: $surface-4;
+                }
+
+                &:selected {
+                    background: $accent-primary;
+                }
+            }
+        }
+    }
+}
+
+// Force override for all combo-like widgets in layout dialog
+.layout-dialog {
+    combobox, comboboxtext, dropdown, .combo {
+        background: $surface-4;
+        color: $text-primary;
+
+        * {
+            background: transparent;
+            color: inherit;
+        }
+
+        button {
+            background: $surface-4;
+            color: $text-primary;
+            border: none;
+        }
+    }
 }
 
 .mapping-delete-btn {
     padding: 2px 8px;
-    border-radius: 2px;
+    border-radius: 0;
     border: 1px solid rgba(138, 74, 74, 0.5);
     background: rgba(138, 74, 74, 0.2);
     color: #cc9999;
     font-size: 14px;
     min-width: 24px;
+    outline-style: none;
+    outline-width: 0;
+    outline-color: transparent;
+    outline-offset: 0;
+        -gtk-icon-filter: none;
+    box-shadow: none;
+    border-image: none;
 
     &:hover {
         background: rgba(138, 74, 74, 0.4);
         border-color: rgba(138, 74, 74, 0.7);
         color: #ffaaaa;
+    }
+
+    &:focus {
+        outline-style: none;
+        outline-width: 0;
+        outline-color: transparent;
+        outline-offset: 0;
+                -gtk-icon-filter: none;
+        box-shadow: none;
+        border-image: none;
+        border-color: rgba(138, 74, 74, 0.5);
+    }
+}
+
+// ============================================
+// FLOWBOX LAYOUTS (Smart Grid)
+// ============================================
+
+.layout-flow, .mappings-flow {
+    background: $surface-3;
+    border: 1px solid $border-primary;
+    border-radius: 0;
+    padding: 8px;
+
+    flowboxchild {
+        &:selected {
+            background: transparent;
+            border-radius: 0;
+        }
+
+        &:focus, &:focus-visible {
+            outline: none;
+            box-shadow: none;
+        }
+    }
+}
+
+.layout-card {
+    background: $surface-4;
+    border: 1px solid $border-primary;
+    border-radius: 0;
+    padding: 4px 8px;
+
+    &.hover {
+        background: $surface-5;
+        border-color: $border-hover;
+    }
+
+    label {
+        font-size: 12px;
+        font-family: "Fira Code", monospace;
+    }
+}
+
+.mapping-card {
+    background: $surface-4;
+    border: 1px solid $border-primary;
+    border-radius: 0;
+    padding: 8px 12px;
+    min-width: 160px;
+
+    &.hover {
+        background: $surface-5;
+        border-color: $border-hover;
+    }
+}
+
+.mapping-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: "Fira Code", monospace;
+    color: $text-primary;
+}
+
+.mapping-card-meta {
+    margin-top: 4px;
+}
+
+.mapping-card-key {
+    font-size: 10px;
+    font-family: "Fira Code", monospace;
+    color: $text-muted;
+}
+
+.mapping-card-value {
+    font-size: 10px;
+    font-family: "Fira Code", monospace;
+    color: $text-secondary;
+}
+
+flowboxchild {
+    padding: 2px;
+    margin: 0;
+    outline-style: none;
+    outline-width: 0;
+    border-radius: 0;
+    background: transparent;
+
+    &:focus, &:focus-visible, &:focus-within {
+        outline-style: none;
+        outline-width: 0;
+        outline: none;
+        box-shadow: none;
+        background: transparent;
+    }
+
+    &:selected {
+        background: transparent;
+        outline: none;
+        box-shadow: none;
+
+        .layout-card, .mapping-card {
+            background: $surface-4;
+            border-color: $border-active;
+            border-width: 1px;
+        }
+    }
+
+    &:selected:focus, &:selected:focus-visible {
+        background: transparent;
+        outline: none;
+        box-shadow: none;
+    }
+}
+
+// Search entries - override all GTK defaults
+searchentry {
+    background: $surface-3;
+    border: 1px solid $border-primary;
+    border-radius: 0;
+    padding: 4px 8px;
+    color: $text-primary;
+    font-family: "Fira Code", monospace;
+    font-size: 12px;
+    box-shadow: none;
+    outline-style: none;
+    outline-width: 0;
+    
+    &:focus {
+        border-color: $border-hover;
+        box-shadow: none;
+        outline-style: none;
+        outline-width: 0;
+            }
+
+    &:hover {
+        border-color: $border-hover;
+    }
+
+    image {
+        color: $text-muted;
+        -gtk-icon-filter: none;
+    }
+
+    selection {
+        background: $accent-primary;
+        color: $text-primary;
+    }
+}
+
+// Paned separator - override GTK defaults
+paned {
+    & > separator {
+        background: $surface-4;
+        min-height: 8px;
+        min-width: 8px;
+
+        &:hover {
+            background: $surface-5;
+        }
+    }
+
+    &:focus > separator {
+        background: $surface-5;
+    }
+}
+
+// ============================================
+// GTK WIDGET FOCUS OVERRIDES
+// ============================================
+
+// GTK4 focus styling - muted green instead of blue
+button, entry, searchentry, combobox, dropdown, flowboxchild, listboxrow, row {
+    &:focus, &:focus-within, &:focus-visible {
+        outline: none;
+        outline-width: 0;
+        outline-style: none;
+        outline-color: transparent;
+        box-shadow: none;
+        border-color: $border-active;
+    }
+}
+
+button {
+    &:focus, &:focus-visible, &:focus-within {
+        outline: none;
+        outline-width: 0;
+        outline-style: none;
+        outline-color: transparent;
+        box-shadow: none;
+        border-color: $border-primary;
+        background-image: none;
+    }
+}
+
+entry, searchentry {
+    &:focus, &:focus-visible, &:focus-within {
+        outline: none;
+        outline-width: 0;
+        outline-style: none;
+        outline-color: transparent;
+        box-shadow: none;
+        border-color: $border-active;
+        caret-color: $accent-hover;
+    }
+}
+
+// GTK4 focus-visible state (keyboard navigation)
+*:focus-visible {
+    outline: none;
+    outline-width: 0;
+    outline-style: none;
+    outline-color: transparent;
+    box-shadow: none;
+}
+
+// Remove all focus indicators globally
+* {
+    outline-offset: 0;
+}
+
+// Specifically target GTK4 focus ring - use green not blue
+:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+// Override GTK4 default accent color
+@define-color accent_bg_color #2a5a2a;
+@define-color accent_color #3a6a3a;
+@define-color focus_border_color #3a5a3a;
+
+// ============================================
+// SEARCHABLE LAYOUT SELECTOR
+// ============================================
+
+// Layout selector popover - floats over content
+.layout-popover {
+    background: $surface-3;
+    border: 1px solid $border-primary;
+    border-radius: 0;
+
+    > contents {
+        background: $surface-3;
+    }
+}
+
+.layout-dropdown-list {
+    background: $surface-4;
+    border: 1px solid $border-secondary;
+    border-radius: 0;
+
+    flowboxchild {
+        padding: 0;
+        margin: 0;
+
+        &:hover .layout-dropdown-item {
+            background: $surface-5;
+        }
+
+        &:selected .layout-dropdown-item {
+            background: $accent-primary;
+            border-color: $accent-hover;
+        }
+    }
+}
+
+.layout-dropdown-item {
+    padding: 8px 12px;
+    background: transparent;
+    border-radius: 0;
+    min-width: 250px;
+
+    label {
+        font-size: 12px;
+        font-family: "Fira Code", monospace;
+        color: $text-primary;
     }
 }
