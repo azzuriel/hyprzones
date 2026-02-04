@@ -1,12 +1,12 @@
 # HyprZones
 
-A Hyprland plugin for declarative zone-based window tiling, inspired by Microsoft PowerToys FancyZones.
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE) &nbsp; [![Hyprland](https://img.shields.io/badge/Hyprland-0.53%2B-blue.svg)](https://hyprland.org) &nbsp; [![C++](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.cppreference.com/w/cpp/23) &nbsp; [![Build](https://img.shields.io/badge/build-CMake-green.svg)](CMakeLists.txt)
 
-## Vision
+A Hyprland plugin for **declarative zone-based window tiling**, inspired by Microsoft PowerToys FancyZones.
 
-Unlike traditional tiling window managers that build layouts imperatively (move left, move up, create group), HyprZones uses **declarative zone definitions**. You define where zones are, and windows snap to them.
+## Overview
 
-## Core Concept
+Unlike traditional tiling window managers that build layouts imperatively, HyprZones uses **declarative zone definitions**. You define where zones are, and windows snap to them.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -14,169 +14,42 @@ Unlike traditional tiling window managers that build layouts imperatively (move 
 │  ┌──────────┬──────────────────────┬──────────────────────┐ │
 │  │          │                      │                      │ │
 │  │  Zone 1  │       Zone 3         │       Zone 4         │ │
-│  │  20%     │       40%            │       40%            │ │
-│  ├──────────┤                      │                      │ │
+│  │  25%     │       25%            │       50%            │ │
+│  ├──────────┤                      ├──────────────────────┤ │
 │  │          │                      │                      │ │
-│  │  Zone 2  │                      │                      │ │
-│  │  20%     │                      │                      │ │
+│  │  Zone 2  │                      │       Zone 5         │ │
+│  │  25%     │                      │       50%            │ │
 │  └──────────┴──────────────────────┴──────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Features (Planned)
+## Features
 
 ### Zone Definition
-- **Grid Layout**: Define zones as grid with splits and merges
-- **Canvas Layout**: Define zones with exact pixel coordinates (supports overlapping)
-- **Percentage-based**: Zones scale with monitor resolution
-- **Multi-monitor**: Separate layouts per monitor
+- **Percentage-based zones** - Zones scale with monitor resolution
+- **Custom layouts** - Define any zone arrangement you need
+- **Per-layout spacing** - Separate horizontal and vertical gap settings
+- **Multi-monitor support** - Different layouts per monitor
 
 ### Window Snapping
-- **Drag + Modifier**: Hold key while dragging to show zones
-- **Keyboard**: Keybinds to move window to specific zone
-- **Multi-zone**: Span window across multiple adjacent zones
-- **Zone memory**: Windows remember their last zone per application
+- **Drag + Modifier** - Hold SHIFT while dragging to show zones and snap
+- **Keyboard shortcuts** - Move windows to specific zones with keybinds
+- **Multi-zone spanning** - Span windows across multiple adjacent zones with CTRL
+- **Zone overlay** - Visual feedback showing available zones
 
 ### Layout Management
-- **Save/Load**: Persist layouts to JSON
-- **Hotkeys**: Quick-switch layouts with keybinds
-- **Per-workspace**: Different layouts per workspace
-- **Templates**: Built-in templates (columns, rows, grid, etc.)
+- **Data-driven** - All layouts defined in `hyprzones.toml`
+- **Monitor/Workspace mappings** - Assign layouts to specific monitors and workspaces
+- **Hot reload** - Changes apply immediately without restart
+- **Multiple layouts** - Switch between layouts on the fly
 
-### Visual Feedback
-- **Zone preview**: Show zones while dragging
-- **Zone numbers**: Display zone indices
-- **Customizable colors**: Zone highlight, border, inactive colors
-
-## Configuration Example
-
-```toml
-# ~/.config/hypr/hyprzones.toml
-
-[general]
-snap_modifier = "SHIFT"        # Hold while dragging
-show_zone_numbers = true
-zone_highlight_color = "rgba(0, 100, 255, 0.3)"
-zone_border_color = "rgba(0, 100, 255, 0.8)"
-
-# Layout: Development
-[[layouts]]
-name = "development"
-hotkey = "SUPER+CTRL+1"
-
-[[layouts.zones]]
-name = "sidebar"
-x = 0
-y = 0
-width = 20       # percentage
-height = 100
-
-[[layouts.zones]]
-name = "main"
-x = 20
-y = 0
-width = 50
-height = 100
-
-[[layouts.zones]]
-name = "terminal"
-x = 70
-y = 0
-width = 30
-height = 60
-
-[[layouts.zones]]
-name = "output"
-x = 70
-y = 60
-width = 30
-height = 40
-
-# Layout: Simple Columns
-[[layouts]]
-name = "columns-3"
-hotkey = "SUPER+CTRL+2"
-template = "columns"
-columns = 3
-```
-
-## Comparison
-
-| Feature | hy3 | dwindle | HyprZones |
-|---------|-----|---------|-----------|
-| Layout definition | Imperative (movewindow) | Automatic | Declarative (zones) |
-| Layout persistence | No | No | Yes (JSON) |
-| Predictable positions | No | No | Yes |
-| Visual zone editor | No | No | Planned |
-| Multi-zone spanning | Manual | No | Yes |
-| Scale to 100 windows | Complex | Automatic | Simple |
-
-## Technical Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    HyprZones Plugin                 │
-├─────────────────────────────────────────────────────┤
-│  ZoneManager        │  LayoutManager                │
-│  - Zone definitions │  - Load/Save layouts          │
-│  - Hit testing      │  - Layout switching           │
-│  - Zone rendering   │  - Hotkey handling            │
-├─────────────────────┼───────────────────────────────┤
-│  WindowSnapper      │  ConfigParser                 │
-│  - Drag detection   │  - TOML parsing               │
-│  - Zone assignment  │  - Validation                 │
-│  - Multi-zone logic │  - Hot reload                 │
-├─────────────────────┴───────────────────────────────┤
-│                 Hyprland Plugin API                 │
-│  - Window events    - Render hooks                  │
-│  - Input hooks      - IPC commands                  │
-└─────────────────────────────────────────────────────┘
-```
-
-## IPC Commands (Planned)
-
-```bash
-# List layouts
-hyprctl hyprzones layouts
-
-# Apply layout
-hyprctl hyprzones apply development
-
-# Move window to zone
-hyprctl hyprzones moveto 3
-
-# Show zone editor
-hyprctl hyprzones editor
-
-# Save current window positions as new layout
-hyprctl hyprzones save my-layout
-```
-
-## Requirements
-
-- Hyprland (with development headers)
-- CMake >= 3.19
-- C++23 compiler (GCC 13+ or Clang 17+)
-- pkg-config
-- pango, cairo
-
-### Arch Linux
-
-```bash
-sudo pacman -S hyprland cmake gcc pango cairo
-```
-
-## Building
-
-```bash
-# Configure
-cmake -DCMAKE_BUILD_TYPE=Release -B build
-
-# Build
-cmake --build build
-
-# The plugin will be at: build/hyprzones.so
-```
+### Visual Zone Editor
+- **GTK-based editor** - Create and edit layouts visually
+- **Live preview** - See changes in real-time
+- **Split/Merge zones** - Easily divide or combine zones
+- **Drag splitters** - Resize zones with pixel precision
+- **Save/Load/Rename/Delete** - Full layout management
+- **Mapping management** - Assign layouts to monitors/workspaces in the editor
 
 ## Installation
 
@@ -185,19 +58,56 @@ cmake --build build
 ```bash
 hyprpm add https://github.com/azzuriel/hyprzones
 hyprpm enable hyprzones
+hyprpm reload
 ```
 
-### Manual Installation
+### Manual Build
+
+#### Plugin Requirements
+
+| Package | Arch Linux | Description |
+|---------|------------|-------------|
+| Hyprland 0.53+ | `hyprland` | Wayland compositor with headers |
+| CMake 3.19+ | `cmake` | Build system |
+| GCC 13+ / Clang 17+ | `gcc` | C++23 compiler |
+| pkg-config | `pkgconf` | Dependency resolver |
+| Pango | `pango` | Text rendering |
+| Cairo | `cairo` | 2D graphics |
+| libdrm | `libdrm` | DRM format headers |
+
+#### Editor Requirements
+
+| Package | Arch Linux | Description |
+|---------|------------|-------------|
+| AGS v3 | `aylurs-gtk-shell` (AUR) | GTK shell framework |
+| GTK3 | `gtk3` | GUI toolkit |
+| GtkLayerShell | `gtk-layer-shell` | Wayland layer shell |
+
+#### Arch Linux
 
 ```bash
-# Build first (see above)
+# Plugin dependencies
+sudo pacman -S hyprland cmake gcc pkgconf pango cairo libdrm
 
-# Copy plugin
+# Editor dependencies
+sudo pacman -S gtk3 gtk-layer-shell
+paru -S aylurs-gtk-shell
+```
+
+#### Build
+
+```bash
+git clone https://github.com/azzuriel/hyprzones
+cd hyprzones
+cmake -DCMAKE_BUILD_TYPE=Release -B build
+cmake --build build
+```
+
+#### Install
+
+```bash
 mkdir -p ~/.local/share/hyprload/plugins
 cp build/hyprzones.so ~/.local/share/hyprload/plugins/
-
-# Or system-wide
-sudo cp build/hyprzones.so /usr/lib/hyprland/plugins/
 ```
 
 Add to `~/.config/hypr/hyprland.conf`:
@@ -206,78 +116,208 @@ Add to `~/.config/hypr/hyprland.conf`:
 plugin = ~/.local/share/hyprload/plugins/hyprzones.so
 ```
 
-Or with hyprpm:
-
-```ini
-exec-once = hyprpm reload -n
-```
-
 ## Configuration
 
-Create `~/.config/hypr/hyprzones.toml` (see examples/hyprzones.toml)
+Create `~/.config/hypr/hyprzones.toml`:
+
+```toml
+# Layout definition
+[[layouts]]
+name = "development"
+spacing_h = 40    # Horizontal gaps (between rows)
+spacing_v = 10    # Vertical gaps (between columns)
+
+[[layouts.zones]]
+name = "sidebar"
+x = 0
+y = 0
+width = 25
+height = 100
+
+[[layouts.zones]]
+name = "main"
+x = 25
+y = 0
+width = 50
+height = 100
+
+[[layouts.zones]]
+name = "terminal"
+x = 75
+y = 0
+width = 25
+height = 50
+
+[[layouts.zones]]
+name = "output"
+x = 75
+y = 50
+width = 25
+height = 50
+
+# Monitor/Workspace Mappings
+[[mappings]]
+monitor = "DP-1"
+workspaces = "1-5"
+layout = "development"
+
+[[mappings]]
+monitor = "*"
+workspaces = "*"
+layout = "development"
+```
+
+### Spacing
+
+- `spacing_h` - Horizontal gap lines (between rows, affects top/bottom)
+- `spacing_v` - Vertical gap lines (between columns, affects left/right)
+
+Spacing only affects gaps **between** zones, never the outer edges.
 
 ## Usage
 
-### Dispatchers
+### Keybindings
+
+Add to `~/.config/hypr/hyprland.conf`:
 
 ```ini
-# Move focused window to zone 0
+# Move window to specific zone
 bind = $mainMod, 1, hyprzones:moveto, 0
+bind = $mainMod, 2, hyprzones:moveto, 1
+bind = $mainMod, 3, hyprzones:moveto, 2
+bind = $mainMod, 4, hyprzones:moveto, 3
 
 # Switch layout
 bind = $mainMod CTRL, 1, hyprzones:layout, development
+bind = $mainMod CTRL, 2, hyprzones:layout, simple
+
+# Cycle through layouts
+bind = $mainMod, Tab, hyprzones:cycle, 1
+bind = $mainMod SHIFT, Tab, hyprzones:cycle, -1
 
 # Show/hide zone overlay
-bind = $mainMod, Z, hyprzones:show,
-bind = $mainMod SHIFT, Z, hyprzones:hide,
+bind = $mainMod, Z, hyprzones:show
+bind = $mainMod SHIFT, Z, hyprzones:hide
+
+# Open zone editor
+bind = $mainMod, E, hyprzones:editor
 ```
+
+### Drag & Drop
+
+1. Start dragging a window
+2. Hold **SHIFT** to show zone overlay
+3. Drop on desired zone to snap
+4. Hold **CTRL** while dragging to select multiple zones
 
 ### IPC Commands
 
 ```bash
-# List layouts
+# List all layouts
 hyprctl hyprzones:layouts
 
-# Move window to zone
+# Move focused window to zone
 hyprctl hyprzones:moveto 0
 
-# Reload config
+# Switch to layout
+hyprctl dispatch hyprzones:layout development
+
+# Reload configuration
 hyprctl hyprzones:reload
+
+# Toggle zone editor
+hyprctl dispatch hyprzones:editor
 ```
+
+## Zone Editor
+
+The visual zone editor allows creating and editing layouts without manually editing TOML files.
+
+### Features
+
+- **Zone tiles** - Click zones to select, drag splitters to resize
+- **Split buttons** - `|` splits vertically, `—` splits horizontally
+- **Merge button** - `×` merges with adjacent zone
+- **Layout list** - Load, save, rename, delete layouts
+- **Mapping editor** - Assign layouts to monitor/workspace combinations
+
+### Controls
+
+| Key | Action |
+|-----|--------|
+| ESC | Close editor |
+| Drag splitter | Resize zones |
+| Click zone | Select zone |
+
+## Comparison
+
+| Feature | hy3 | dwindle | HyprZones |
+|---------|-----|---------|-----------|
+| Layout definition | Imperative | Automatic | Declarative |
+| Layout persistence | No | No | Yes (TOML) |
+| Predictable positions | No | No | Yes |
+| Visual zone editor | No | No | Yes |
+| Multi-zone spanning | Manual | No | Yes |
+| Per-monitor layouts | Manual | No | Yes |
+| Per-workspace layouts | No | No | Yes |
 
 ## Project Structure
 
 ```
 hyprzones/
-├── include/hyprzones/
-│   ├── Zone.hpp          # Zone data structure
-│   ├── Layout.hpp        # Layout (collection of zones)
-│   ├── Config.hpp        # Configuration
-│   ├── DragState.hpp     # Drag tracking state
-│   ├── ZoneManager.hpp   # Zone hit-testing
-│   ├── LayoutManager.hpp # Layout switching
-│   ├── WindowSnapper.hpp # Window snapping
-│   ├── Renderer.hpp      # Zone overlay rendering
-│   └── Globals.hpp       # Global instances
-├── src/
-│   ├── main.cpp          # Plugin entry point
-│   ├── Globals.cpp       # Global definitions
-│   └── *.cpp             # Implementations
-├── examples/
-│   └── hyprzones.toml    # Example configuration
-└── CMakeLists.txt
+├── include/hyprzones/     # Header files
+│   ├── Zone.hpp           # Zone data structure
+│   ├── Layout.hpp         # Layout with zones + spacing
+│   ├── Config.hpp         # Plugin configuration
+│   ├── ZoneManager.hpp    # Zone calculations
+│   ├── LayoutManager.hpp  # Layout loading/saving
+│   ├── Renderer.hpp       # Zone overlay rendering
+│   └── Globals.hpp        # Global instances
+├── src/                   # Plugin source
+│   ├── main.cpp           # Plugin entry, hooks, IPC
+│   ├── ZoneManager.cpp    # Zone pixel calculations
+│   ├── LayoutManager.cpp  # TOML parsing
+│   ├── ConfigParser.cpp   # Config loading
+│   └── Renderer.cpp       # OpenGL rendering
+├── editor/                # Visual zone editor (AGS v3)
+│   ├── app.ts             # Editor entry point
+│   ├── widget/            # GTK widgets
+│   ├── services/          # Layout service, IPC
+│   ├── models/            # Data models
+│   └── utils/             # Geometry calculations
+└── examples/              # Example configurations
 ```
 
-## Status
+## Troubleshooting
 
-**Early Development** - Core architecture implemented, rendering WIP.
+### Zones don't appear
+
+1. Check if plugin is loaded: `hyprctl plugins list`
+2. Verify config exists: `~/.config/hypr/hyprzones.toml`
+3. Check for TOML syntax errors
+4. Ensure monitors are configured in `hyprland.conf`
+5. Restart Hyprland if plugin was just installed
+
+### Editor doesn't open
+
+The editor requires AGS v3 and GTK Layer Shell:
+
+```bash
+# Arch Linux
+sudo pacman -S gtk3 gtk-layer-shell
+paru -S aylurs-gtk-shell
+```
+
+### Mappings not recognized
+
+After creating new mappings in the editor, the plugin reloads automatically. Verify mappings exist in `~/.config/hypr/hyprzones.toml`.
 
 ## License
 
-BSD 3-Clause (same as Hyprland)
+BSD 3-Clause License (same as Hyprland)
 
-## Inspiration
+## Credits
 
-- [Microsoft PowerToys FancyZones](https://github.com/microsoft/PowerToys)
-- [hy3](https://github.com/outfoxxed/hy3)
-- [i3](https://i3wm.org/)
+- Inspired by [Microsoft PowerToys FancyZones](https://github.com/microsoft/PowerToys)
+- Built for [Hyprland](https://hyprland.org)
+- Editor built with [AGS](https://github.com/Aylur/ags)

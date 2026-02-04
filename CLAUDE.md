@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+## MANDATORY WORKFLOW
+
+- **QUESTIONS ALWAYS HAVE PRIORITY** - If the user's request contains questions, answer ALL questions FIRST before implementing anything
+- **NEVER implement while questions are unanswered** - This ensures the implementation matches user intent
+- **NEVER ask questions you can answer yourself** - Research first using web search, file reads, or other tools before asking the user
+- **Only ask questions that require user decision** - Technical facts, versions, documentation can be researched independently
+- **NEVER invent values when you have correct data** - If you researched a value (version, number, name), use EXACTLY that value, do not make up different values
+
 ## STRICTLY FORBIDDEN
 
 - **NEVER use `sudo`** - no exceptions, no matter what
