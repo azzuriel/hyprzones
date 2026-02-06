@@ -503,9 +503,7 @@ static SDispatchResult dispatchEditor(std::string) {
         // Child process - try toggle first, start if not running
         execlp("bash", "bash", "-c",
             "ags request -i hyprzones-editor toggle 2>/dev/null || "
-            "ags run /mnt/code/SRC/GITHUB/hyprzones/editor/app.ts 2>/dev/null || "
-            "ags run ~/.config/hyprzones/editor/app.ts 2>/dev/null || "
-            "ags run /usr/share/hyprzones/editor/app.ts 2>/dev/null",
+            "ags run ~/.config/hyprzones/editor/app.ts",
             nullptr);
         _exit(1);
     }

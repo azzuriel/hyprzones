@@ -13,5 +13,6 @@ authors = ["Jan Ohlmann (azzuriel)"]
 output = "build/hyprzones.so"
 build = [
     "cmake -DCMAKE_BUILD_TYPE=Release -B build",
-    "cmake --build build"
+    "cmake --build build",
+    "mkdir -p ~/.config/hyprzones/editor && cp -r editor/* ~/.config/hyprzones/editor/"
 ]
