@@ -15,11 +15,35 @@ import { showLayoutPanel, hideLayoutPanel, setLayoutPanelCallbacks } from "./Lay
 import { setUpdateDisplayCallback as setSplitterUpdateCallback } from "./Splitter"
 import { setUpdateDisplayCallback as setZoneOpsUpdateCallback } from "./ZoneOperations"
 
+// Find the GDK monitor matching a Hyprland monitor connector name
+function findGdkMonitor(connectorName: string): Gdk.Monitor | null {
+    const display = Gdk.Display.get_default()
+    if (!display) return null
+
+    const monitors = display.get_monitors()
+    for (let i = 0; i < monitors.get_n_items(); i++) {
+        const mon = monitors.get_item(i) as Gdk.Monitor | null
+        if (mon && mon.get_connector() === connectorName) {
+            return mon
+        }
+    }
+    return null
+}
+
 // Reload layout for current monitor/workspace (called when editor is shown)
 export async function reloadCurrentLayout(): Promise<void> {
     const focusedMonitor = state.allMonitors.find(m => m.focused) || state.allMonitors[0]
     if (focusedMonitor) {
         state.monitor = await getMonitorGeometry()
+
+        // Update LayerShell monitor to match focused monitor
+        if (state.editorWindow) {
+            const gdkMonitor = findGdkMonitor(state.selectedMonitorName)
+            if (gdkMonitor) {
+                Gtk4LayerShell.set_monitor(state.editorWindow, gdkMonitor)
+            }
+        }
+
         const workspaceId = focusedMonitor.activeWorkspace?.id || 1
         const mappedLayoutName = getActiveLayoutName(state.selectedMonitorName, workspaceId)
 
@@ -222,13 +246,9 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
     try {
         Gtk4LayerShell.init_for_window(win)
         Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.OVERLAY)
-        const display = Gdk.Display.get_default()
-        if (display) {
-            const monitors = display.get_monitors()
-            const gdkMonitor = monitors.get_item(0) as Gdk.Monitor | null
-            if (gdkMonitor) {
-                Gtk4LayerShell.set_monitor(win, gdkMonitor)
-            }
+        const gdkMonitor = findGdkMonitor(state.selectedMonitorName)
+        if (gdkMonitor) {
+            Gtk4LayerShell.set_monitor(win, gdkMonitor)
         }
         Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.TOP, true)
         Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.BOTTOM, true)
