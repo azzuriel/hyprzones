@@ -55,7 +55,7 @@ static int getCurrentWorkspaceID() {
 }
 
 // Helper: Get usable monitor area (accounting for waybar, gaps, etc.)
-// Must match editor margins: TOP=97, BOTTOM=22, LEFT=22, RIGHT=22
+// Margins are fixed pixel offsets, identical on all monitors
 struct UsableArea {
     double x, y, w, h;
 };
