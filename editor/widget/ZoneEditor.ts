@@ -36,12 +36,16 @@ export async function reloadCurrentLayout(): Promise<void> {
     if (focusedMonitor) {
         state.monitor = await getMonitorGeometry()
 
-        // Update LayerShell monitor to match focused monitor
+        // Update LayerShell monitor and container size to match focused monitor
         if (state.editorWindow) {
             const gdkMonitor = findGdkMonitor(state.selectedMonitorName)
             if (gdkMonitor) {
                 Gtk4LayerShell.set_monitor(state.editorWindow, gdkMonitor)
             }
+            state.editorWindow.set_default_size(state.fullScreenWidth, state.fullScreenHeight)
+        }
+        if (state.zoneContainer) {
+            state.zoneContainer.set_size_request(state.fullScreenWidth, state.fullScreenHeight)
         }
 
         const workspaceId = focusedMonitor.activeWorkspace?.id || 1
