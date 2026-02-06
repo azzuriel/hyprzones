@@ -467,9 +467,9 @@ static SDispatchResult dispatchShowZones(std::string) {
         }
     }
 
-    // Request redraw
-    if (monitor) {
-        g_pHyprRenderer->damageMonitor(monitor);
+    // Request redraw on all monitors so overlay renders everywhere
+    for (auto& m : g_pCompositor->m_monitors) {
+        g_pHyprRenderer->damageMonitor(m);
     }
 
     result.success = true;
@@ -483,10 +483,9 @@ static SDispatchResult dispatchHideZones(std::string) {
     if (g_renderer->isVisible()) {
         g_renderer->hide();
 
-        // Request single redraw to clear overlay
-        auto monitor = g_pCompositor->getMonitorFromCursor();
-        if (monitor) {
-            g_pHyprRenderer->damageMonitor(monitor);
+        // Redraw all monitors to clear overlay everywhere
+        for (auto& m : g_pCompositor->m_monitors) {
+            g_pHyprRenderer->damageMonitor(m);
         }
     }
 
