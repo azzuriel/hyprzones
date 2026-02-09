@@ -31,36 +31,41 @@ function findGdkMonitor(connectorName: string): Gdk.Monitor | null {
 }
 
 // Reload layout for current monitor/workspace (called when editor is shown)
+// The caller (app.ts) is responsible for calling show() after this resolves
 export async function reloadCurrentLayout(): Promise<void> {
-    const focusedMonitor = state.allMonitors.find(m => m.focused) || state.allMonitors[0]
-    if (focusedMonitor) {
-        state.monitor = await getMonitorGeometry()
+    // 1. Refresh monitor info and geometry
+    state.monitor = await getMonitorGeometry()
 
-        // Switch LayerShell to focused monitor - hide/show to force remap and resize
-        if (state.editorWindow) {
-            const gdkMonitor = findGdkMonitor(state.selectedMonitorName)
-            if (gdkMonitor) {
-                state.editorWindow.hide()
-                Gtk4LayerShell.set_monitor(state.editorWindow, gdkMonitor)
-                if (state.zoneContainer) {
-                    state.zoneContainer.set_size_request(state.fullScreenWidth, state.fullScreenHeight)
-                }
-                state.editorWindow.show()
-            }
+    // 2. Hide window and switch LayerShell to focused monitor
+    if (state.editorWindow) {
+        state.editorWindow.hide()
+        const gdkMonitor = findGdkMonitor(state.selectedMonitorName)
+        if (gdkMonitor) {
+            Gtk4LayerShell.set_monitor(state.editorWindow, gdkMonitor)
         }
-
-        const workspaceId = focusedMonitor.activeWorkspace?.id || 1
-        const mappedLayoutName = getActiveLayoutName(state.selectedMonitorName, workspaceId)
-
-        let loadedLayout = mappedLayoutName ? loadLayoutByName(mappedLayoutName) : null
-        if (!loadedLayout) {
-            loadedLayout = loadLayoutFromConfig()
-        }
-        state.currentLayout = cloneLayout(loadedLayout || state.currentLayout)
-        state.originalLayout = cloneLayout(state.currentLayout)
-        state.hasChanges = false
-        updateZoneDisplay()
     }
+
+    // 3. Clear stale zone widgets BEFORE resizing to prevent GTK layout miscalculation
+    if (state.zoneContainer) {
+        removeAllChildren(state.zoneContainer)
+        state.zoneContainer.set_size_request(state.fullScreenWidth, state.fullScreenHeight)
+    }
+
+    // 4. Load layout for this monitor/workspace
+    const focusedMonitor = state.allMonitors.find(m => m.focused) || state.allMonitors[0]
+    const workspaceId = focusedMonitor?.activeWorkspace?.id || 1
+    const mappedLayoutName = getActiveLayoutName(state.selectedMonitorName, workspaceId)
+
+    let loadedLayout = mappedLayoutName ? loadLayoutByName(mappedLayoutName) : null
+    if (!loadedLayout) {
+        loadedLayout = loadLayoutFromConfig()
+    }
+    state.currentLayout = cloneLayout(loadedLayout || state.currentLayout)
+    state.originalLayout = cloneLayout(state.currentLayout)
+    state.hasChanges = false
+
+    // 5. Draw zones with correct dimensions before caller shows the window
+    updateZoneDisplay()
 }
 
 // GTK4 helper: remove all children from a container

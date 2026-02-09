@@ -29,15 +29,19 @@ export function selectMonitor(mon: HyprMonitor): MonitorGeometry {
     state.selectedMonitorName = mon.name
 
     const dims = getEffectiveDimensions(mon)
-    state.fullScreenWidth = dims.width
-    state.fullScreenHeight = dims.height
+    // Use logical dimensions (physical / scale) for GTK4 Layer Shell
+    const scale = mon.scale > 0 ? mon.scale : 1
+    const logicalWidth = Math.round(dims.width / scale)
+    const logicalHeight = Math.round(dims.height / scale)
+    state.fullScreenWidth = logicalWidth
+    state.fullScreenHeight = logicalHeight
 
     // Use fixed margins (waybar + gaps)
     return {
         x: MARGIN_LEFT,
         y: MARGIN_TOP,
-        width: dims.width - MARGIN_LEFT - MARGIN_RIGHT,
-        height: dims.height - MARGIN_TOP - MARGIN_BOTTOM
+        width: logicalWidth - MARGIN_LEFT - MARGIN_RIGHT,
+        height: logicalHeight - MARGIN_TOP - MARGIN_BOTTOM
     }
 }
 
