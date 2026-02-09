@@ -23,8 +23,8 @@ export interface HyprMonitor {
 // Default layout if none exists
 export const DEFAULT_LAYOUT: Layout = {
     name: 'default',
-    spacingH: 10,
-    spacingV: 40,
+    spacingH: 40,
+    spacingV: 10,
     zones: [
         { index: 0, name: 'Left', x: 0, y: 0, width: 0.5, height: 1 },
         { index: 1, name: 'Right', x: 0.5, y: 0, width: 0.5, height: 1 }
