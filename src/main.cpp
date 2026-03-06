@@ -12,6 +12,8 @@
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/SharedDefs.hpp>
+#include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/layout/LayoutManager.hpp>
 
 #include <unistd.h>
 #include <sstream>
@@ -26,11 +28,10 @@
 
 using namespace HyprZones;
 
-// Callback handles
-static SP<HOOK_CALLBACK_FN> g_pMouseMoveCallback;
-static SP<HOOK_CALLBACK_FN> g_pMouseButtonCallback;
-static SP<HOOK_CALLBACK_FN> g_pRenderCallback;
-static SP<HOOK_CALLBACK_FN> g_pWindowOpenCallback;
+// Callback handles (new typed listener API)
+static CHyprSignalListener g_pMouseMoveListener;
+static CHyprSignalListener g_pMouseButtonListener;
+static CHyprSignalListener g_pRenderListener;
 
 // Helper: Get focused window
 static PHLWINDOW getFocusedWindow() {
@@ -75,11 +76,10 @@ static UsableArea getUsableMonitorArea(CMonitor* monitor) {
 }
 
 // Callback: Mouse move
-static void onMouseMove(void*, SCallbackInfo&, std::any data) {
-    auto coords = std::any_cast<const Vector2D>(data);
-
-    // Check if Hyprland is actually dragging a window
-    auto draggedWindow = g_pInputManager->m_currentlyDraggedWindow.lock();
+static void onMouseMove(const Vector2D& coords, Event::SCallbackInfo& info) {
+    // Check if Hyprland is actually dragging a window via the new drag controller
+    auto target = ::g_layoutManager->dragController()->target();
+    PHLWINDOW draggedWindow = target ? target->window() : nullptr;
 
     if (!draggedWindow) {
         // No window being dragged - reset drag state
@@ -121,7 +121,7 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
         return;
     }
 
-    auto* layout = g_layoutManager->getLayoutForMonitor(
+    auto* layout = HyprZones::g_layoutManager->getLayoutForMonitor(
         g_config, getCurrentMonitorName(), getCurrentWorkspaceID()
     );
 
@@ -181,9 +181,7 @@ static void onMouseMove(void*, SCallbackInfo&, std::any data) {
 }
 
 // Callback: Mouse button
-static void onMouseButton(void*, SCallbackInfo&, std::any data) {
-    auto e = std::any_cast<IPointer::SButtonEvent>(data);
-
+static void onMouseButton(const IPointer::SButtonEvent& e, Event::SCallbackInfo& info) {
     // Only handle left mouse button release
     if (e.button != BTN_LEFT)
         return;
@@ -192,7 +190,7 @@ static void onMouseButton(void*, SCallbackInfo&, std::any data) {
         // Button released - check if we need to snap to zone
         if (g_dragState.isDragging && g_dragState.isZoneSnapping) {
             if (!g_dragState.selectedZones.empty() && g_dragState.draggedWindow) {
-                auto* layout = g_layoutManager->getLayoutForMonitor(
+                auto* layout = HyprZones::g_layoutManager->getLayoutForMonitor(
                     g_config, getCurrentMonitorName(), getCurrentWorkspaceID());
 
                 if (layout) {
@@ -267,17 +265,9 @@ static void onMouseButton(void*, SCallbackInfo&, std::any data) {
 }
 
 // Callback: Render (for zone overlay)
-static void onRender(void*, SCallbackInfo&, std::any data) {
+static void onRender(eRenderStage stage) {
     if (!g_renderer || !g_renderer->isVisible())
         return;
-
-    // The render hook passes eRenderStage, not a monitor pointer
-    eRenderStage stage;
-    try {
-        stage = std::any_cast<eRenderStage>(data);
-    } catch (...) {
-        return;
-    }
 
     // Only render overlays after windows are drawn (on top of everything)
     if (stage != RENDER_POST_WINDOWS)
@@ -291,7 +281,7 @@ static void onRender(void*, SCallbackInfo&, std::any data) {
     CMonitor* monitor = pMonitor.get();
 
     // Get layout for this monitor
-    auto* layout = g_layoutManager->getLayoutForMonitor(
+    auto* layout = HyprZones::g_layoutManager->getLayoutForMonitor(
         g_config, monitor->m_name,
         monitor->m_activeWorkspace ? monitor->m_activeWorkspace->m_id : -1
     );
@@ -344,7 +334,7 @@ static std::string cmdMoveto(eHyprCtlOutputFormat, std::string args) {
     if (!window)
         return "error: no focused window";
 
-    auto* layout = g_layoutManager->getLayoutForMonitor(
+    auto* layout = HyprZones::g_layoutManager->getLayoutForMonitor(
         g_config, getCurrentMonitorName(), getCurrentWorkspaceID());
 
     if (!layout)
@@ -387,14 +377,14 @@ static std::string cmdReload(eHyprCtlOutputFormat, std::string) {
 // IPC: Save layouts to file
 static std::string cmdSave(eHyprCtlOutputFormat, std::string args) {
     std::string path = args.empty() ? getConfigPath() + ".backup" : args;
-    bool success = g_layoutManager->saveLayouts(path, g_config.layouts, g_config.mappings);
+    bool success = HyprZones::g_layoutManager->saveLayouts(path, g_config.layouts, g_config.mappings);
     return success ? "saved to " + path : "error: failed to save";
 }
 
 // IPC: Load layouts from file
 static std::string cmdLoad(eHyprCtlOutputFormat, std::string args) {
     std::string path = args.empty() ? getConfigPath() : args;
-    auto layouts = g_layoutManager->loadLayouts(path);
+    auto layouts = HyprZones::g_layoutManager->loadLayouts(path);
     if (layouts.empty()) {
         return "error: no layouts loaded from " + path;
     }
@@ -422,7 +412,7 @@ static SDispatchResult dispatchMoveto(std::string args) {
 // Dispatcher: Switch layout
 static SDispatchResult dispatchLayout(std::string args) {
     SDispatchResult result;
-    g_layoutManager->switchLayout(g_config, args);
+    HyprZones::g_layoutManager->switchLayout(g_config, args);
     result.success = true;
     return result;
 }
@@ -436,7 +426,7 @@ static SDispatchResult dispatchCycleLayout(std::string args) {
             direction = std::stoi(args);
         } catch (...) {}
     }
-    g_layoutManager->cycleLayout(g_config, direction);
+    HyprZones::g_layoutManager->cycleLayout(g_config, direction);
     result.success = true;
     return result;
 }
@@ -454,7 +444,7 @@ static SDispatchResult dispatchShowZones(std::string) {
 
         // Compute zones for current monitor
         if (monitor) {
-            auto* layout = g_layoutManager->getLayoutForMonitor(
+            auto* layout = HyprZones::g_layoutManager->getLayoutForMonitor(
                 g_config, monitor->m_name,
                 monitor->m_activeWorkspace ? monitor->m_activeWorkspace->m_id : -1
             );
@@ -526,13 +516,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     initGlobals();
     reloadConfig();
 
-    // Register callbacks
-    g_pMouseMoveCallback = HyprlandAPI::registerCallbackDynamic(
-        g_handle, "mouseMove", onMouseMove);
-    g_pMouseButtonCallback = HyprlandAPI::registerCallbackDynamic(
-        g_handle, "mouseButton", onMouseButton);
-    g_pRenderCallback = HyprlandAPI::registerCallbackDynamic(
-        g_handle, "render", onRender);
+    // Register callbacks using new typed event bus API
+    g_pMouseMoveListener = Event::bus()->m_events.input.mouse.move.listen(onMouseMove);
+    g_pMouseButtonListener = Event::bus()->m_events.input.mouse.button.listen(onMouseButton);
+    g_pRenderListener = Event::bus()->m_events.render.stage.listen(onRender);
 
     // Register config values
     HyprlandAPI::addConfigValue(g_handle, "plugin:hyprzones:enabled",
