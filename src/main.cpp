@@ -242,8 +242,9 @@ static void onMouseButton(const IPointer::SButtonEvent& e, Event::SCallbackInfo&
                                 std::to_string(static_cast<int>(w)) + " " +
                                 std::to_string(static_cast<int>(h)) + "," + windowAddr;
 
-                            g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
+                            // Resize first, then move (Hyprland 0.54+ requires this order)
                             g_pKeybindManager->m_dispatchers["resizewindowpixel"](sizeArg);
+                            g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
                         }
                     }
                 }
@@ -362,8 +363,9 @@ static std::string cmdMoveto(eHyprCtlOutputFormat, std::string args) {
         std::to_string(static_cast<int>(zone.pixelW)) + " " +
         std::to_string(static_cast<int>(zone.pixelH));
 
-    g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
+    // Resize first, then move (Hyprland 0.54+ requires this order)
     g_pKeybindManager->m_dispatchers["resizewindowpixel"](sizeArg);
+    g_pKeybindManager->m_dispatchers["movewindowpixel"](moveArg);
 
     return "ok";
 }
