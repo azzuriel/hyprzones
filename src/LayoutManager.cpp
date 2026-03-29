@@ -92,6 +92,11 @@ Layout LayoutManager::generateFromTemplate(const std::string& templateType,
     return layout;
 }
 
+// Normalize workspace number: key 0 = workspace 10 (standard Hyprland convention)
+static int normalizeWs(int ws) {
+    return ws == 0 ? 10 : ws;
+}
+
 bool LayoutManager::workspaceMatchesPattern(int workspace, const std::string& pattern) {
     if (pattern.empty() || pattern == "*") {
         return true;
@@ -103,12 +108,12 @@ bool LayoutManager::workspaceMatchesPattern(int workspace, const std::string& pa
         size_t pos = 0;
         while ((pos = p.find(',')) != std::string::npos) {
             std::string token = p.substr(0, pos);
-            if (!token.empty() && std::stoi(token) == workspace) {
+            if (!token.empty() && normalizeWs(std::stoi(token)) == workspace) {
                 return true;
             }
             p.erase(0, pos + 1);
         }
-        if (!p.empty() && std::stoi(p) == workspace) {
+        if (!p.empty() && normalizeWs(std::stoi(p)) == workspace) {
             return true;
         }
         return false;
@@ -117,13 +122,13 @@ bool LayoutManager::workspaceMatchesPattern(int workspace, const std::string& pa
     // Handle range: "1-5"
     if (pattern.find('-') != std::string::npos) {
         size_t dashPos = pattern.find('-');
-        int start = std::stoi(pattern.substr(0, dashPos));
-        int end = std::stoi(pattern.substr(dashPos + 1));
+        int start = normalizeWs(std::stoi(pattern.substr(0, dashPos)));
+        int end = normalizeWs(std::stoi(pattern.substr(dashPos + 1)));
         return workspace >= start && workspace <= end;
     }
 
     // Single number
-    return std::stoi(pattern) == workspace;
+    return normalizeWs(std::stoi(pattern)) == workspace;
 }
 
 Layout* LayoutManager::getLayoutForMonitor(Config& config,
