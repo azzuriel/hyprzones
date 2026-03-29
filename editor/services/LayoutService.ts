@@ -132,9 +132,10 @@ export function getActiveLayoutName(monitorName: string, workspaceId: number): s
         const ws = mapping.workspaces;
         if (ws === '*') continue;  // Skip wildcard in first pass
 
-        // Check if workspace matches
-        const wsNumbers = ws.split(',').map(s => s.trim());
-        if (wsNumbers.includes(String(workspaceId))) {
+        // Check if workspace matches (normalize 0→10: key 0 = workspace 10)
+        const normalizeWs = (n: number) => n === 0 ? 10 : n;
+        const wsNumbers = ws.split(',').map(s => normalizeWs(parseInt(s.trim())));
+        if (wsNumbers.includes(workspaceId)) {
             return mapping.layout;
         }
     }
