@@ -52,8 +52,9 @@ export async function reloadCurrentLayout(): Promise<void> {
     }
 
     // 4. Load layout for this monitor/workspace
-    const focusedMonitor = state.allMonitors.find(m => m.focused) || state.allMonitors[0]
-    const workspaceId = focusedMonitor?.activeWorkspace?.id || 1
+    const selectedMonitor = state.allMonitors.find(m => m.name === state.selectedMonitorName)
+        || state.allMonitors.find(m => m.focused) || state.allMonitors[0]
+    const workspaceId = selectedMonitor?.activeWorkspace?.id || 1
     const mappedLayoutName = getActiveLayoutName(state.selectedMonitorName, workspaceId)
 
     let loadedLayout = mappedLayoutName ? loadLayoutByName(mappedLayoutName) : null
@@ -216,8 +217,9 @@ export default async function ZoneEditor(): Promise<Gtk.Window> {
     }
 
     // Load layout for current monitor/workspace
-    const focusedMonitor = state.allMonitors.find(m => m.focused) || state.allMonitors[0]
-    const workspaceId = focusedMonitor?.activeWorkspace?.id || 1
+    const selectedMonitor = state.allMonitors.find(m => m.name === state.selectedMonitorName)
+        || state.allMonitors.find(m => m.focused) || state.allMonitors[0]
+    const workspaceId = selectedMonitor?.activeWorkspace?.id || 1
     const mappedLayoutName = getActiveLayoutName(state.selectedMonitorName, workspaceId)
 
     let loadedLayout = mappedLayoutName ? loadLayoutByName(mappedLayoutName) : null
