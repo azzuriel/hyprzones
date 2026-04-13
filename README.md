@@ -357,6 +357,29 @@ sudo pacman -S gtk4 gtk4-layer-shell
 paru -S aylurs-gtk-shell
 ```
 
+### Editor keybind opens once but no longer toggles (AGS / gjs version mismatch)
+
+If `SUPER+SHIFT+Z` opens the editor the first time but every subsequent press hangs or does nothing, and `pgrep -af "ags request"` shows piling-up zombie processes, you are almost certainly hitting an `aylurs-gtk-shell` ↔ `gjs` version mismatch. The editor's IPC goes through `ags request -i hyprzones-editor toggle`, which talks D-Bus to a service set up by gnim (the GObject helper library bundled with AGS). When `gjs` is upgraded to a version with a different signal callback signature than the installed AGS was built against, gnim's `#handleMethodCall` raises a `TypeError` on every D-Bus method call, the response is never sent, and `ags request` hangs forever.
+
+Concrete example we hit: Arch upgraded `gjs 2:1.86.0-2 → 2:1.88.0-1`; the installed AUR `aylurs-gtk-shell 3.1.0-1` was built against the old gjs and crashed inside `gnim/dist/dbus.ts` on every Request call. The fix was to upgrade AGS to the AUR version that contains the gjs-1.88 compatibility shim:
+
+```bash
+yay -S aylurs-gtk-shell
+```
+
+How to diagnose the same class of problem in the future:
+
+1. `grep -E "gjs|aylur" /var/log/pacman.log | tail` — look for a recent `gjs` upgrade close to when the breakage started.
+2. `yay -Si aylurs-gtk-shell` and compare with `pacman -Qi aylurs-gtk-shell` — if AUR has a newer release, install it before patching anything.
+3. Kill any leftover hung editor instance after the upgrade so the new gnim is loaded:
+   ```bash
+   pkill -9 -f "ags run.*hyprzones/editor"
+   pkill -9 -f "ags request -i hyprzones-editor"
+   ```
+4. Verify with `busctl --user list | grep hyprzones-editor` that no stale D-Bus name remains, then trigger `SUPER+SHIFT+Z` again.
+
+The editor itself (`editor/app.ts`) is also written defensively against this class of failure: every `requestHandler` branch calls `res(...)` synchronously before any GTK / wayland work, and all GTK calls are deferred via `GLib.idle_add`. Even if a future GTK/wayland call blocks, `ags request` will still receive its reply immediately and the dispatcher will not stack zombies.
+
 ### Mappings not recognized
 
 After creating new mappings in the editor, the plugin reloads automatically. Verify mappings exist in `~/.config/hypr/hyprzones.toml`.
