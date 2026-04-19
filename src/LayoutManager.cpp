@@ -142,9 +142,6 @@ Layout* LayoutManager::getLayoutForMonitor(Config& config,
         if (monitorMatch && wsMatch) {
             auto it = config.layoutIndex.find(mapping.layout);
             if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
-                logToFile("[HyprZones] getLayoutForMonitor: mon=" + monitorName +
-                          " ws=" + std::to_string(workspace) + " -> matched mapping -> layout=" +
-                          mapping.layout);
                 return &config.layouts[it->second];
             }
         }
@@ -154,18 +151,12 @@ Layout* LayoutManager::getLayoutForMonitor(Config& config,
     if (!config.activeLayout.empty()) {
         auto it = config.layoutIndex.find(config.activeLayout);
         if (it != config.layoutIndex.end() && it->second < config.layouts.size()) {
-            logToFile("[HyprZones] getLayoutForMonitor: mon=" + monitorName +
-                      " ws=" + std::to_string(workspace) + " -> no mapping, using active=" +
-                      config.activeLayout);
             return &config.layouts[it->second];
         }
     }
 
     // Last resort: first layout
     if (!config.layouts.empty()) {
-        logToFile("[HyprZones] getLayoutForMonitor: mon=" + monitorName +
-                  " ws=" + std::to_string(workspace) + " -> fallback to first layout=" +
-                  config.layouts[0].name);
         return &config.layouts[0];
     }
 
